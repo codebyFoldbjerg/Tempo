@@ -156,7 +156,7 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .mbar.mbs{margin-left:-1px;border-radius:7px 0 0 7px}.mbar.mbe{margin-right:-1px;border-radius:0 7px 7px 0}.mbar.mbs.mbe{border-radius:7px}.mbar.mbl{margin-left:-5px}.mbar.mbr{margin-right:-5px}
 .mbar.sp{background:none;visibility:hidden}.mbt{display:block;height:13px;position:absolute;left:0;top:0;z-index:3;font-style:normal;padding-left:5px;overflow:hidden;text-overflow:ellipsis;width:calc(var(--len)*100% + (var(--len) - 1)*8px);text-shadow:0 0 2px #0006}
 .task.virt,.adev.virt,.pill.virt{border-style:dashed;opacity:.85}.task.virt .st{font-size:15px}
-.sy,.st,.tchip .sy,.pill .sy{text-decoration:none!important}.done .sy{text-decoration:none!important;opacity:1}</style></head><body>
+.sy,.st,.tchip .sy,.pill .sy{text-decoration:none!important}.done .sy{text-decoration:none!important;opacity:1}.tgn{color:color-mix(in srgb,var(--c) 78%,var(--ink));font-weight:700}.tcrow input.tcn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:inherit;font:inherit}</style></head><body>
 <header><button class="gear" id="gear" onclick="settingsSheet()" aria-label="Settings">⚙︎</button><div><h1 id="ttl">Tempo</h1><div class="sub" id="sub"></div></div><div class="right"><div class="sync" id="sum"></div><div class="sync" id="syn" style="justify-content:flex-end"></div></div></header>
 <div class="navrow" id="navrow"></div>
 <main id="main"></main>
@@ -336,7 +336,7 @@ function taskToGoogle(t){
   n.push('📆 '+(t.date||'-'));   /* planned date (Tempo); Google's due field now holds the DEADLINE */
   if(t.time!=null&&!t.blk)n.push('⏰ '+t24(t.time));
   if(t.rec&&t.rec!='none')n.push('🔁 '+t.rec);
-  if(t.sid)n.push('Series: '+t.sid);if(t.occ)n.push('Occurrence: '+t.occ);if(t.skip&&t.skip.length)n.push('Skip: '+t.skip.join(','));   /* repeat series id, original date of this occurrence, skipped dates */
+  if(t.sid)n.push('Series: '+t.sid);if(t.occ)n.push('Occurrence: '+t.occ);if(t.stime!=null)n.push('STime: '+t24(t.stime));if(t.skip&&t.skip.length)n.push('Skip: '+t.skip.join(','));   /* repeat series id, original date of this occurrence, skipped dates */
   if(t.blk){const ev=events.find(x=>x.id==t.blk);if(ev&&ev.gid)n.push('📅 '+ev.gid)}
   const g={title:(t.icon?t.icon+' ':'')+t.t,notes:n.join('\n'),status:t.p==2?'completed':'needsAction',due:t.due?t.due+'T00:00:00.000Z':null};   /* Tasks API: date only, time part is ignored; null clears it */   /* icon is written in FRONT of the task name */
   if(t.p<2)g.completed=null;
@@ -347,7 +347,7 @@ function taskFromGoogle(g,tag,listId){
   (g.notes||'').split(/\r?\n/).forEach(l=>{const x=l.trim();
     const m=x.match(/^(⏰|🔁|🔔|⚑|📅|📆)\uFE0F?\s*(.*)$/u);
     if(m){meta[m[1]]=m[2].trim();return}
-    const sm=x.match(/^(Series|Occurrence|Skip):\s*(.*)$/i);if(sm){meta['s_'+sm[1].toLowerCase()]=sm[2].trim();return}
+    const sm=x.match(/^(Series|Occurrence|Skip|STime):\s*(.*)$/i);if(sm){meta['s_'+sm[1].toLowerCase()]=sm[2].trim();return}
     if(/^Status:/i.test(x)){meta.status=x.replace(/^Status:\s*/i,'');return}
     if(x.startsWith('Moved from ')){hist.push(x);return}
     desc.push(l)});                        /* everything else is the user's own note */
@@ -361,7 +361,7 @@ function taskFromGoogle(g,tag,listId){
   else if(/^\d{4}-\d{2}-\d{2}$/.test(meta['⚑']||''))due=meta['⚑'];   /* legacy: due = planned date, deadline in notes */
   if(meta['📅'])blkGid=meta['📅'];
   let icon='',title=g.title||'';const ic0=['📞','⚠️'].find(i=>title.startsWith(i+' '));if(ic0){icon=ic0;title=title.slice(ic0.length+1)}
-  return{id:id++,gid:g.id,gl:listId,t:title,tag,icon,p,doneAt:g.completed?Date.parse(g.completed)||null:null,date,time,blk:null,blkGid,rec,rem,due,sid:meta.s_series||null,occ:/^\d{4}-\d{2}-\d{2}$/.test(meta.s_occurrence||'')?meta.s_occurrence:null,skip:(meta.s_skip||'').split(',').filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)),desc:desc.join('\n'),hist};
+  return{id:id++,gid:g.id,gl:listId,t:title,tag,icon,p,stime:(()=>{const q=(meta.s_stime||'').match(/^(\d{1,2}):(\d{2})/);return q?+q[1]+q[2]/60:null})(),doneAt:g.completed?Date.parse(g.completed)||null:null,date,time,blk:null,blkGid,rec,rem,due,sid:meta.s_series||null,occ:/^\d{4}-\d{2}-\d{2}$/.test(meta.s_occurrence||'')?meta.s_occurrence:null,skip:(meta.s_skip||'').split(',').filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)),desc:desc.join('\n'),hist};
 }
 
 /* ---- 4. READ: calendars, task lists, events, tasks ----------------------- */
@@ -497,17 +497,35 @@ async function restoreNotesFromDrive(){
 }
 
 /* ---- 7. Time blocking: assign chosen tasks to ONE event ------------------- */
-function assignTasksToEvent(ev,ids){
-  /* Chosen tasks get the event's date and block id; the old time is cleared because the time is derived
-     from the event (blkT() spreads the tasks evenly over its time span). Tasks that were in the event but are
-     no longer chosen go back to "not planned". Each task is patched individually. */
+const isRecEv=e=>!!(e.rid||(e.rec&&e.rec!='none')),evSer=id=>{const x=events.find(y=>y.id==id);return(x&&x.rid)||null},vmap={};
+function vtask(o){const id=-(1e9+o.base.id*1e5+Math.round(P(o.date)/864e5));vmap[id]={bid:o.base.id,date:o.date};return{id,t:o.t,tag:o.tag,icon:o.icon,p:0,v:1,time:null,date:o.date,blk:o.base.blk}}
+function inEv(o){return !!o.base.blk&&events.some(e=>!calOff.has(e.cal)&&(e.id==o.base.blk?evOn(P(o.date)).includes(e):(e.rid&&e.rid==evSer(o.base.blk)&&e.day==o.date)))}   /* virtual occurrence is shown inside its event */
+function blkEvFor(t,nd){const e0=events.find(x=>x.id==t.blk);if(!e0)return null;if(e0.rid)return events.find(x=>x.rid==e0.rid&&x.cal==e0.cal&&x.day==nd)||null;return isRecEv(e0)?e0:null}
+function rruleToRule(rr){if(!rr)return null;const p={};rr.replace(/^RRULE:/,'').split(';').forEach(x=>{const q=x.split('=');p[q[0]]=q[1]});
+  const f={DAILY:'d',WEEKLY:'w',MONTHLY:'m',YEARLY:'y'}[p.FREQ];if(!f||p.COUNT||p.BYSETPOS||p.BYMONTHDAY||p.BYMONTH||p.BYYEARDAY||p.BYWEEKNO)return null;
+  let days=null;if(p.BYDAY){if(f!='w'||/\d/.test(p.BYDAY))return null;days=p.BYDAY.split(',').map(x=>['SU','MO','TU','WE','TH','FR','SA'].indexOf(x)).filter(x=>x>=0)}
+  const u={u:f,n:+p.INTERVAL||1};if(days&&days.length)u.days=days;if(p.UNTIL)u.until=p.UNTIL.slice(0,4)+'-'+p.UNTIL.slice(4,6)+'-'+p.UNTIL.slice(6,8);return recBuild(u)}
+async function masterRule(ev){try{const r=await googleRequest('GET',calUrl(ev.cal)+'/'+ev.rid);return rruleToRule((r.recurrence||[]).find(x=>/^RRULE:/.test(x)))}catch(x){return null}}   /* Google instances carry no rule: read the master event */
+function addNewTask(){snap();const v=($('#fnewt')||{}).value;if(!v||!v.trim())return;F.ntag=$('#fnewtag').value;(F.newTasks=F.newTasks||[]).push({t:v.trim(),tag:F.ntag});redraw()}
+function assignTasksToEvent(ev,ids,evP,fresh){
+  /* Chosen tasks get the event's date and block id; their time is derived from the event (blkT). Tasks that were in the event
+     but are no longer chosen go back to "not planned". If the event repeats, assigned tasks repeat with the SAME rule
+     (the Tempo task rule; only the current occurrence is a real Google task, later ones are virtual). */
+  fresh=fresh||[];const own=ev.rec&&ev.rec!='none'?ev.rec:null,list=[];let needRule=false;
   tasks.forEach(x=>{
-    if(ids.includes(x.id)){logMove(x,ev.day,null);x.blk=ev.id;x.date=ev.day;x.time=null;updateTask(x)}
-    else if(x.blk==ev.id){x.blk=null;x.date=null;x.time=null;updateTask(x)}
+    if(ids.includes(x.id)){const was=x.blk==ev.id,keep=own&&was&&x.date;
+      if(ev.rid&&!own&&!was)needRule=true;
+      if(!keep){logMove(x,ev.day,null);x.date=ev.day}
+      x.blk=ev.id;x.time=null;
+      if(own){x.rec=own;if(!x.sid){x.sid=newSid();x.occ=x.date}}
+      else if(was&&!ev.rid&&x.sid&&x.rec&&x.rec!='none'){x.rec='none';x.sid=null;x.occ=null}   /* event no longer repeats */
+      list.push(x)}
+    else if(x.blk==ev.id){x.blk=null;x.date=null;x.time=null;if(x.sid){x.rec='none';x.sid=null;x.occ=null}list.push(x)}
   });
+  const flush=()=>list.forEach(x=>fresh.includes(x)?createTask(x):updateTask(x)),go=()=>evP?Promise.resolve(evP).then(flush):flush();
+  if(needRule)masterRule(ev).then(r=>{if(r)list.forEach(x=>{if(ids.includes(x.id)&&x.blk==ev.id){x.rec=r;if(!x.sid){x.sid=newSid();x.occ=x.date}}});else toast("Couldn't mirror this event's repeat rule – the task was assigned to this occurrence only");go();render()});
+  else go();
 }
-
-/* ---- 8. Demo data (only used while USE_DUMMY_DATA = true) ---------------- */
 function dummyCalendars(){
   /* GET https://www.googleapis.com/calendar/v3/users/me/calendarList
      Map each item: summary -> name, backgroundColor -> colour. */
@@ -607,23 +625,23 @@ else t=view=='tasks'?'Tasks':'Notes';
 $('#ttl').textContent=t;$('#sub').textContent=s;$('#ttl').onclick=cal?dateSheet:null;$('#sum').innerHTML=sumHtml();$('#fab').style.display=pickMode?'none':'';$('#gear').style.display=view=='today'?'':'none';
 $('#navrow').innerHTML=cal?`<button class="nb" onclick="shift(-1)" aria-label="Previous">‹</button><button class="chip" onclick="cur=new Date(TODAY);render()">Today</button><button class="nb" onclick="shift(1)" aria-label="Next">›</button>${view=='today'||view=='week'||view=='month'?tkMenuHtml()+calMenuHtml():''}`:'';
 $('#main').innerHTML=({today:vDay,week:vWeek,month:vMonth,tasks:vTasks,notes:vNotes})[view]()}
-function vDay(){const k=iso(cur),HS=S.start,HE=S.end,PX=54,allEv=evOn(cur),ev=allEv.filter(e=>!calHide.has(e.cal)&&!e.allDay).map(e=>evSpan(e,k)),ad=allEv.filter(e=>!calHide.has(e.cal)&&e.allDay).map(e=>evSpan(e,k)),dls=tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2),extra=allEv.filter(e=>calHide.has(e.cal)&&e.day==k).flatMap(e=>blkT(e).map(({t,s})=>({...t,time:s}))),tk=tkOn(cur),vo=futureOcc(1).filter(o=>o.date==k),any=tk.filter(t=>t.time==null),tm=[...tk.filter(t=>t.time!=null),...extra].sort((a,b)=>a.time-b.time);let h='';
+function vDay(){const k=iso(cur),HS=S.start,HE=S.end,PX=54,allEv=evOn(cur),ev=allEv.filter(e=>!calHide.has(e.cal)&&!e.allDay).map(e=>evSpan(e,k)),ad=allEv.filter(e=>!calHide.has(e.cal)&&e.allDay).map(e=>evSpan(e,k)),dls=tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2),extra=allEv.filter(e=>calHide.has(e.cal)&&(e.day==k||isRecEv(e))).flatMap(e=>blkT(e,k).map(({t,s})=>({...t,time:s}))),tk=tkOn(cur),vo=futureOcc(1).filter(o=>o.date==k&&!inEv(o)),any=tk.filter(t=>t.time==null),tm=[...tk.filter(t=>t.time!=null),...extra,...vo.filter(o=>o.time!=null)].sort((a,b)=>a.time-b.time);let h='';
 for(let i=HS;i<HE;i++)h+=`<div class="hr"><small>${i}:00</small></div>`;
 const vis=ev.filter(e=>e.e>HS&&e.s<HE),lay=new Map(),groups=[];let gp=[],ge=-1;
 vis.forEach(e=>{if(gp.length&&(e.s-gp[gp.length-1].s>=0.45||e.s>=ge)){groups.push(gp);gp=[];ge=-1}gp.push(e);ge=Math.max(ge,Math.max(e.e,e.s+MIN_EV_PX/54))});if(gp.length)groups.push(gp);
 groups.forEach(grp=>{const ends=[],cs=[];grp.forEach(e=>{let c=ends.findIndex(x=>x<=e.s);if(c<0)c=ends.length;ends[c]=Math.max(e.e,e.s+MIN_EV_PX/54);cs.push(c)});
 grp.forEach((e,i)=>{const gi=groups.indexOf(grp),dp=Math.min(3,vis.filter(o=>o!==e&&groups.findIndex(q=>q.includes(o))<gi&&Math.max(o.e,o.s+MIN_EV_PX/54)>e.s).length);lay.set(e.id,{c:cs[i],n:ends.length,dp})})});
-const evs=ev.map((e,i)=>{if(e.e<=HS||e.s>=HE)return '';const ly=lay.get(e.id)||{c:0,n:1,dp:0},ind=ly.dp*12,sl=e.day==k?blkT(e).map(({t,s})=>`<span class="sl ${t.p==2?'done':''}"><b class="sy" style="--c:${col(t.tag)}">${SY[t.p]}</b> ${fmt(s)} ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></span>`).join(''):'';
+const evs=ev.map((e,i)=>{if(e.e<=HS||e.s>=HE)return '';const ly=lay.get(e.id)||{c:0,n:1,dp:0},ind=ly.dp*12,sl=(e.day==k||isRecEv(e))?blkT(e,k).map(({t,s})=>`<span class="sl ${t.p==2?'done':''}"><b class="sy" style="--c:${col(t.tag)}">${SY[t.p]}</b> ${fmt(s)} ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></span>`).join(''):'';
 return `<div class="ev${(e.e-e.s)<0.75?' short':''}" data-dk="e${e.id}" onclick="detail('event',${e.id},'${k}')" style="--c:${ec(e)};top:${Math.max(0,e.s-HS)*PX}px;left:calc(8px + ${ind}px + ${ly.c} * (100% - 14px - ${ind}px) / ${ly.n});width:calc((100% - 14px - ${ind}px) / ${ly.n} - 3px);right:auto;z-index:${1+ly.dp};${ly.dp?'box-shadow:0 2px 8px #0003;':''}height:${Math.max(MIN_EV_PX,(Math.min(e.e,HE)-Math.max(e.s,HS))*PX-2)}px"><b>${esc(e.t)}</b> <span class="sub"><span class="tm">${fmt(e.s)}–${fmt(e.e)}</span>${e.rec!='none'?' ↻':''}${dayTag(e)}</span>${sl}</div>`}).join('');
-let last=-9e9;const tms=tm.map(t=>{const top=Math.min(Math.max(Math.max(0,t.time-HS)*PX+2,last+2),(HE-HS)*PX-28);last=top+28;return `<button class="tk ${t.p==2?'done':''}" data-dk="t${t.id}" style="--c:${col(t.tag)};top:${top}px" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}).join('');
+let last=-9e9;const tms=tm.map(t=>{const top=Math.min(Math.max(Math.max(0,t.time-HS)*PX+2,last+2),(HE-HS)*PX-28);last=top+28;if(t.v)return `<button class="tk virt" style="--c:${col(t.tag)};top:${top}px" onclick="vDetail(${t.base.id},'${t.date}')" title="Projected from repeat rule">\u21BB <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`;return `<button class="tk ${t.p==2?'done':''}" data-dk="t${t.id}" style="--c:${col(t.tag)};top:${top}px" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}).join('');
 const n=new Date(),nowH=n.getHours()+n.getMinutes()/60;
 const now=k==iso(TODAY)&&nowH>=HS&&nowH<=HE?`<div class="now" style="top:${Math.max(0,nowH-HS)*PX}px"></div>`:'';
 const pend=tasks.filter(t=>t.date&&t.date<iso(TODAY)&&t.p<2).sort((a,b)=>a.date.localeCompare(b.date)).map(taskRow).join('');
-return `<div class="pad">${(ad.length||dls.length||any.length||vo.length)?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${h}${evs}${tms}${now}</div>
+return `<div class="pad">${(ad.length||dls.length||any.length||vo.some(o=>o.time==null))?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.filter(o=>o.time==null).map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${h}${evs}${tms}${now}</div>
 <b>Pending tasks</b> <span class="sub">planned earlier, not completed</span><div style="margin-top:8px">${pend||'<div class="empty">All caught up.</div>'}</div></div>`}
 function vWeek(){let h='';const a=wk(cur),M=wkMode,fo=futureOcc(1);
 for(let i=0;i<7;i++){const d=add(a,i),k=iso(d),it=[];
-evOn(d).forEach(e0=>{const e=evSpan(e0,k),hid=calHide.has(e.cal),bt=e.day==k?blkT(e):[],pill=`<button class="pill" style="--c:${ec(e)}" onclick="detail('event',${e.id},'${k}')"><b>${e.allDay?'All day':fmt(e.s)}</b> ${esc(e.t)}${dayTag(e)}</button>`;
+evOn(d).forEach(e0=>{const e=evSpan(e0,k),hid=calHide.has(e.cal),bt=(e.day==k||isRecEv(e))?blkT(e,k):[],pill=`<button class="pill" style="--c:${ec(e)}" onclick="detail('event',${e.id},'${k}')"><b>${e.allDay?'All day':fmt(e.s)}</b> ${esc(e.t)}${dayTag(e)}</button>`;
 if(hid){if(M!='events')bt.forEach(({t,s})=>it.push({t:s+.001,h:tpill(t,s,false)}))}
 else if(M=='both'){const inner=bt.map(({t,s})=>`<button class="pill in ${t.p==2?'done':''}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${fmt(s)} ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('');
 it.push({t:e.allDay?-1:e.s,h:`<div class="evbox" style="--c:${ec(e)}"><button class="pill in" onclick="detail('event',${e.id},'${k}')"><b>${e.allDay?'All day':fmt(e.s)}</b> ${esc(e.t)}${dayTag(e)}</button>${inner}</div>`})}
@@ -631,7 +649,7 @@ else if(M=='events')it.push({t:e.allDay?-1:e.s,h:pill});
 else bt.forEach(({t,s})=>it.push({t:s+.001,h:tpill(t,s,false)}))});
 if(M!='events')tkOn(d).forEach(t=>it.push({t:t.time??25,h:tpill(t,t.time,false)}));
 if(M!='events')tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2).forEach(t=>it.push({t:-2,h:`<button class="pill dlp" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`}));
-if(M!='events')fo.filter(o=>o.date==k).forEach(o=>it.push({t:o.time??25,h:vpill(o,'pill t')}));
+if(M!='events')fo.filter(o=>o.date==k&&!inEv(o)).forEach(o=>it.push({t:o.time??25,h:vpill(o,'pill t')}));
 it.sort((x,y)=>x.t-y.t);
 h+=`<div class="dayrow"><div class="dn ${k==iso(TODAY)?'today':''}" onclick="cur=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});go('today')"><small class="sub">${d.toLocaleDateString('en',{weekday:'short'})}</small><b>${d.getDate()}</b></div><div style="flex:1;min-width:0">${it.map(x=>x.h).join('')||'<span class="sub">Free</span>'}</div></div>`}
 return `<div class="seg">${[['both','Both'],['events','Events'],['tasks','Tasks']].map(([k,l])=>`<button class="${M==k?'on':''}" onclick="wkMode='${k}';render()">${l}</button>`).join('')}</div><div class="pad"><div class="card calarea" style="padding:6px 14px">${h}</div><div class="sub">Tap an entry for details. Tap a date to open the day.</div></div>`}
@@ -661,11 +679,15 @@ function dateSheet(){
   dateSheet0()}
 function goWeek(){const y=+$('#gy').value||cur.getFullYear(),w=Math.min(53,Math.max(1,+$('#gw').value||1));cur=add(wk(new Date(y,0,4)),7*(w-1));close_();render()}   /* ISO week: week 1 contains 4 Jan */
 function dateSheet0(){sheet(`<h2>Go to date</h2><input id="gd" type="date" value="${iso(cur)}"><button class="btn" onclick="if($('#gd').value)cur=P($('#gd').value);close_();render()">Show</button>`)}
+function blkInfo(t){const blk=t.v?t.base.blk:t.blk,d=t.date;if(!blk||!d)return null;
+  const ev=events.find(e=>!calOff.has(e.cal)&&!e.allDay&&(e.id==blk?(!isRecEv(e)||evOn(P(d)).includes(e)):(e.rid&&e.rid==evSer(blk)&&e.day==d)));if(!ev)return null;
+  const x=blkT(ev,d).find(y=>t.v?(y.t.v&&vmap[y.t.id]&&vmap[y.t.id].bid==t.base.id):y.t.id==t.id);return{ev,s:x?x.s:ev.s}}   /* start time derived from the event the task sits in */
+const inEvTxt=t=>{const b=t.time==null?blkInfo(t):null;return t.time!=null?' · '+t24(t.time):b?' · '+t24(b.s)+' · in '+esc(b.ev.t):''};
 function taskRow(t){const pe=t.date&&t.date<iso(TODAY)&&t.p<2,tv=view=='tasks',sel=tv&&taskSelIds.has(t.id);
 const lead=tv&&taskMode?`<span class="st" style="--c:${col(t.tag)}">${sel?'☑':'☐'}</span>`:`<button class="st" style="--c:${col(t.tag)}" onclick="event.stopPropagation();setP(${t.id},(${t.p}+1)%3)" aria-label="Change status">${SY[t.p]}</button>`;
 const ev=tv?`onpointerdown="tpDown(${t.id})" onpointerup="tpUp()" onpointerleave="tpUp()" onpointercancel="tpUp()" oncontextmenu="return false" onclick="taskClick(${t.id})"`:`onclick="detail('task',${t.id})"`;
 return `<div class="task ${t.p==2?'done':''} ${sel?'sel':''}" style="--c:${col(t.tag)}"${view=='today'?` data-dk="u${t.id}"`:''} ${ev}>${lead}
-<div class="t"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${PN[t.p]}${t.date?' · '+dl(t.date):''}${t.time!=null?' · '+t24(t.time):''} · ${tl(t.tag)}${t.due?' · due '+dl(t.due):''}</div></div>${pe?'<span class="pend" title="Pending">!</span>':''}</div>`}
+<div class="t"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${PN[t.p]}${t.date?' · '+dl(t.date):''}${inEvTxt(t)} · <span class="tgn">${tl(t.tag)}</span>${t.due?' · due '+dl(t.due):''}</div></div>${pe?'<span class="pend" title="Pending">!</span>':''}</div>`}
 function pk(i){picked.has(i)?picked.delete(i):picked.add(i);render()}
 /* ---- Repeating tasks: finishing creates a NEW task for the next date; the finished one stays as history ---- */
 const spawnLock=new Set(),newSid=()=>'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -676,8 +698,8 @@ function spawnNext(t){
   if(spawnLock.has(key)||tasks.some(x=>x!==t&&x.sid==t.sid&&x.occ==nd))return null;   /* same series + same occurrence date already exists: no duplicate */
   spawnLock.add(key);
   const off=t.due&&t.date?Math.round((P(t.due)-P(t.date))/864e5):null,td=iso(TODAY),
-  nw={id:id++,t:t.t,tag:t.tag,icon:t.icon,p:0,date:nd,time:t.time,blk:null,rec:t.rec,rem:t.rem,desc:t.desc,hist:[],due:off==null?null:iso(add(P(nd),off)),sid:t.sid,occ:nd,skip:(t.skip||[]).filter(x=>x>=td)};
-  tasks.unshift(nw);Promise.resolve(createTask(nw)).finally(()=>spawnLock.delete(key));return nw}
+  nw={id:id++,t:t.t,tag:t.tag,icon:t.icon,p:0,date:nd,time:t.stime!=null?t.stime:t.time,blk:null,rec:t.rec,rem:t.rem,desc:t.desc,hist:[],due:off==null?null:iso(add(P(nd),off)),sid:t.sid,occ:nd,skip:(t.skip||[]).filter(x=>x>=td)};
+  {const be=blkEvFor(t,nd);if(be){nw.blk=be.id;nw.time=null}}tasks.unshift(nw);Promise.resolve(createTask(nw)).finally(()=>spawnLock.delete(key));return nw}
 function setP(i,p){const sn=snapState(),t=tasks.find(x=>x.id==i);if(!t)return;
 const was=t.p;t.p=p;if(p==2&&was!=2)t.doneAt=Date.now();let nx=null;
 if(p==2&&was!=2&&t.rec&&t.rec!='none'&&t.occ)nx=spawnNext(t);
@@ -693,7 +715,7 @@ function futureOcc(cv){const a=90;   /* virtual occurrences: 3 months, never pas
       out.push({v:1,base:t,t:t.t,tag:t.tag,icon:t.icon,time:t.time,date:d,rec:t.rec,rem:t.rem})}});
   return out.sort((x,y)=>x.date.localeCompare(y.date)||(x.time??25)-(y.time??25))}
 function vpill(o,cls){return `<button class="${cls} virt" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')" title="Projected from repeat rule">\u21BB ${o.time!=null?fmt(o.time)+' ':''}${ic(o.icon)} <span class="tn">${esc(o.t)}</span></button>`}
-function vrow(o){return `<div class="task virt" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')"><span class="st" style="--c:${col(o.tag)}">\u21BB</span><div class="t"><b>${ic(o.icon)} ${esc(o.t)}</b><div class="m">Projected · ${dl(o.date)}${o.time!=null?' · '+t24(o.time):''} · ${tl(o.tag)}</div></div></div>`}
+function vrow(o){return `<div class="task virt" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')"><span class="st" style="--c:${col(o.tag)}">\u21BB</span><div class="t"><b>${ic(o.icon)} ${esc(o.t)}</b><div class="m">Projected · ${dl(o.date)}${inEvTxt(o)} · <span class="tgn">${tl(o.tag)}</span></div></div></div>`}
 function vDetail(bid,date){const b=tasks.find(x=>x.id==bid);if(!b)return;
 sheet(`<div class="sub"><span class="dot" style="background:${col(b.tag)}"></span>${tl(b.tag)} list</div><h2>${ic(b.icon)} ${esc(b.t)}</h2><div class="sub" style="margin:-4px 0 8px">Projected from the repeat rule. Not created in Google Tasks yet.</div><div style="margin:0 0 8px">${bdg(b)}</div><div style="margin-bottom:12px">${dl(date)}${b.time!=null?' at '+fmt(b.time):''}</div><button class="btn alt" style="margin-bottom:8px" onclick="skipVirtual(${bid},'${date}')">Skip this occurrence</button><button class="btn" onclick="close_()">Close</button>`)}
 function skipVirtual(bid,date){const sn=snapState(),b=tasks.find(x=>x.id==bid);if(!b)return;b.skip=[...(b.skip||[]),date];updateTask(b);close_();render();toast('Occurrence skipped',()=>{undoTo(sn)();const b0=tasks.find(x=>x.id==bid);if(b0)updateTask(b0)})}
@@ -703,7 +725,7 @@ function startDayChg(){const a=$('#fd'),b=$('#fed');if(a&&b&&a.value){b.value=a.
 function endDayChg(){const a=$('#fd'),b=$('#fed');if(a&&b&&a.value&&b.value&&b.value<a.value){b.value=a.value;toast('End date cannot be before the start date')}}
 function vTasks(){const pm=pickMode,td=iso(TODAY),lim=planRange=='week'?iso(add(TODAY,6)):planRange=='month'?iso(add(TODAY,29)):null,
 base=tasks.filter(t=>(filt=='All'||t.tag==filt)&&(!lim||(t.date&&t.date<=lim&&(t.p<2||t.date>=td)))),op=base.filter(t=>t.p<2);
-const srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=='status'?x.p-y.p:sortBy=='date'?(x.date||'9999').localeCompare(y.date||'9999')||(x.time??25)-(y.time??25):x.t.localeCompare(y.t));
+const _et=new Map(),et=x=>{if(!_et.has(x))_et.set(x,x.time??(blkInfo(x)||{}).s??25);return _et.get(x)},srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=='status'?x.p-y.p:sortBy=='date'?(x.date||'9999').localeCompare(y.date||'9999')||et(x)-et(y):x.t.localeCompare(y.t));
 const vo=(!pm&&!taskMode)?futureOcc().filter(o=>(filt=='All'||o.tag==filt)&&(!lim||o.date<=lim)).map(o=>({...o,p:0})):[];
 const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',op.filter(t=>!t.date&&t.tag=='Uncategorized')]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
@@ -727,7 +749,9 @@ sheet(`<div class="sub">${esc(n.tag)}${n.hold||tagHold.has(n.tag)?' · on hold':
 <div class="opts"><button class="opt" onclick="close_();openForm('task',null,notes.find(x=>x.id==${i}).t,null,${i})">✓<span>Task</span></button><button class="opt" onclick="close_();openForm('event',null,notes.find(x=>x.id==${i}).t,null,${i})">▦<span>Event</span></button><button class="opt" onclick="holdNote(${i})">${n.hold?playIcon(26):pauseIcon(26)}<span>${n.hold?'Resume':'On hold'}</span></button><button class="opt" style="color:#E5484D" onclick="discard(${i})">✕<span>Discard</span></button></div>`)}
 function discard(i){const k=notes.findIndex(x=>x.id==i),n=notes.splice(k,1)[0];notes.forEach(x=>{if(x.parent==i)x.parent=n.parent||null});close_();render();toast('Note discarded',()=>{notes.splice(k,0,n);render()})}
 function allOn(d){return tasks.filter(t=>t.date==iso(d))}
-function blkT(e){const bt=tasks.filter(t=>tagVis(t)&&t.blk==e.id),len=(e.e-e.s)/Math.max(bt.length,1);return bt.map((t,i)=>({t,s:e.s+i*len}))}
+function blkT(e,k){const rc=isRecEv(e);let bt=tasks.filter(t=>tagVis(t)&&t.blk==e.id&&(!rc||!k||t.date==k));
+  if(rc&&k)bt=[...bt,...futureOcc(1).filter(o=>o.date==k&&o.base.blk&&(o.base.blk==e.id||(e.rid&&evSer(o.base.blk)==e.rid&&e.day==k))).map(vtask)];
+  const len=(e.e-e.s)/Math.max(bt.length,1);return bt.map((t,i)=>({t,s:e.s+i*len}))}
 function dayScore(d){const a=S.planStart??S.start,b=S.planEnd??S.end;return b>a?Math.min(100,Math.round(100*blockedHrs(sumEvents(d),a,b)/(b-a))):0}
 function planBar(p){const g=Math.max(1,S.goal),r=p/g,n=Math.round(Math.min(1,r)*5),c=r<.5?'#E5484D':r<1?'#E8A317':'#14A38B',w=r<.5?'Low':r<1?'Good':'Great';
 return `<span style="color:${c}" title="Goal ${g}%">Plan ${p}% ${'▰'.repeat(n)+'▱'.repeat(5-n)} ${w}</span>`}
@@ -757,6 +781,16 @@ if(m=='now')planTask(t,iso(TODAY),Math.round((n.getHours()+n.getMinutes()/60)*12
 synced('Planned '+dl(t.date)+(t.time!=null?' at '+fmt(t.time):''),undoTo(sn));render();if(isOpen()&&D.kind)sheet(detHtml())}
 function applyTheme(){const r=document.documentElement;S.theme=='system'?r.removeAttribute('data-theme'):r.setAttribute('data-theme',S.theme)}
 function hrOpts(sel,a,b){let o='';for(let h=a;h<=b;h++)o+=`<option value="${h}" ${h==sel?'selected':''}>${String(h).padStart(2,'0')}:00</option>`;return o}
+function applyTagRename(a,b){const nL={};Object.keys(L).forEach(k=>{nL[k==a?b:k]=L[k]});L=nL;
+  if(listIds[a]){listIds[b]=listIds[a];delete listIds[a]}
+  if(S.tagColors&&S.tagColors[a]){S.tagColors[b]=S.tagColors[a];delete S.tagColors[a]}
+  tasks.forEach(t=>{if(t.tag==a)t.tag=b});if(filt==a)filt=b;if(tkHide.has(a)){tkHide.delete(a);tkHide.add(b)}}
+async function renameTag(old,nw){nw=(nw||'').trim();if(!nw||nw==old||old=='Uncategorized'){settingsSheet();return}
+  if(L[nw]!==undefined||nw.toLowerCase()=='uncategorized'){toast('A tag called "'+nw+'" already exists');settingsSheet();return}
+  applyTagRename(old,nw);render();settingsSheet();   /* tasks change tag name at once; the Google Tasks list is renamed (one PATCH, same list id) */
+  const lid=listIds[nw];if(!lid||USE_DUMMY_DATA||DRY_RUN){toast('Tag renamed');return}
+  try{await googleRequest('PATCH','https://tasks.googleapis.com/tasks/v1/users/@me/lists/'+lid,{title:nw});toast('Tag renamed in Google Tasks')}
+  catch(x){applyTagRename(nw,old);render();settingsSheet();syncFail(x);toast('Could not rename the list in Google – name restored')}}
 function setTagColor(k,v){S.tagColors=S.tagColors||{};S.tagColors[k]=v;render();settingsSheet()}
 function resetTagColor(k){if(S.tagColors)delete S.tagColors[k];render();settingsSheet()}
 function settingsSheet(){const old=$('#panel').scrollTop,ck=(arr,on,fn)=>arr.map(c=>`<label class="crow"><input type="checkbox" ${on(c)?'checked':''} onchange="${fn}('${c}',this)"><span class="dot" style="background:${CAL[c]}"></span>${esc(c)}</label>`).join('');
@@ -764,7 +798,7 @@ sheet(`<h2>Settings</h2>
 <div class="sec"><div class="sh">Calendar view</div><div class="sd">Time range shown on the Day tab</div>
 <div class="row"><select style="flex:1;margin:0" onchange="setS('start',+this.value)">${hrOpts(S.start,0,22)}</select><span>to</span><select style="flex:1;margin:0" onchange="setS('end',+this.value)">${hrOpts(S.end,1,24)}</select></div>
 <div class="sd">Calendars to display (unchecked calendars are hidden everywhere)</div><div class="calset">${ck(Object.keys(CAL),c=>!calOff.has(c),'toggleUse')}</div></div>
-<div class="sec"><div class="sh">Task tag colors</div><div class="sd">Colors for task tags only (calendars keep their Google colors)</div>${Object.keys(L).map(k=>`<div class="tcrow"><span class="dot" style="background:${col(k)}"></span><span class="tcn">${esc(tl(k))}</span><input type="color" data-k="${esc(k)}" value="${/^#[0-9a-f]{6}$/i.test(col(k))?col(k):'#6B7587'}" onchange="setTagColor(this.dataset.k,this.value)"><button class="chip" data-k="${esc(k)}" onclick="resetTagColor(this.dataset.k)">Reset</button></div>`).join('')}</div>
+<div class="sec"><div class="sh">Task tag colors</div><div class="sd">Colors for task tags only (calendars keep their Google colors)</div>${Object.keys(L).map(k=>`<div class="tcrow"><span class="dot" style="background:${col(k)}"></span>${k=='Uncategorized'?`<span class="tcn">${esc(tl(k))}</span>`:`<input class="tcn" type="text" maxlength="60" data-k="${esc(k)}" value="${esc(k)}" onchange="renameTag(this.dataset.k,this.value)" aria-label="Tag name" style="min-width:0;flex:1">`}<input type="color" data-k="${esc(k)}" value="${/^#[0-9a-f]{6}$/i.test(col(k))?col(k):'#6B7587'}" onchange="setTagColor(this.dataset.k,this.value)"><button class="chip" data-k="${esc(k)}" onclick="resetTagColor(this.dataset.k)">Reset</button></div>`).join('')}</div>
 <div class="sec"><div class="sh">Summary &amp; plan %</div><div class="sd">Summary lines (top right of Day and Week) are based on</div>
 <div class="row"><button class="chip ${S.sumMode=='visible'?'on':''}" onclick="setS('sumMode','visible')">Calendars shown in the view</button><button class="chip ${S.sumMode=='selected'?'on':''}" onclick="setS('sumMode','selected')">Selected calendars</button></div>
 ${S.sumMode=='selected'?`<div class="calset">${ck(calActive(),c=>S.sumCals.includes(c),'toggleSumCal')}</div>`:''}
@@ -819,10 +853,10 @@ if(s.k[0]=='u'){s.y=y;const r=$('.tl').getBoundingClientRect();s.over=y>=r.top&&
 const max=$('.tl').offsetHeight-s.el.offsetHeight;s.top=Math.round(Math.max(0,Math.min(max,y-s.tl.top-s.off))/13.5)*13.5;s.el.style.top=s.top+'px';
 const h=S.start+s.top/54,tm=s.el.querySelector('.tm');if(tm)tm.textContent=s.dur!=null?fmt(Math.min(h,24-s.dur))+'–'+fmt(Math.min(h,24-s.dur)+s.dur):fmt(h)}
 function dragEnd(){clearTimeout(dragT);const s=dragState;if(!s)return;dragState=null;const sn=snapState();dragJust=true;setTimeout(()=>{dragJust=false},350);
-if(s.k[0]=='u'){s.ghost.remove();s.el.classList.remove('dragging');if(s.over){const t=tasks.find(x=>x.id==+s.k.slice(1));planTask(t,iso(cur),s.h,null);synced('Planned '+dl(t.date)+' at '+fmt(s.h),undoTo(sn))}render();return}
+if(s.k[0]=='u'){s.ghost.remove();s.el.classList.remove('dragging');if(s.over){const t=tasks.find(x=>x.id==+s.k.slice(1));if(isRep(t))askRepeatMove(t,iso(cur),s.h,sn);else{planTask(t,iso(cur),s.h,null);synced('Planned '+dl(t.date)+' at '+fmt(s.h),undoTo(sn))}}render();return}
 const h=S.start+s.top/54,i=+s.k.slice(1);
 if(s.k[0]=='e'){const e=events.find(x=>x.id==i),d=e.e-e.s;e.s=Math.min(h,24-d);e.e=e.s+d;window.updateCalendarEvent&&updateCalendarEvent(e)}
-else{const t=tasks.find(x=>x.id==i);t.time=h;window.updateTask&&updateTask(t)}
+else{const t=tasks.find(x=>x.id==i);if(isRep(t)){askRepeatMove(t,t.date,h,sn);render();return}t.time=h;window.updateTask&&updateTask(t)}
 synced('Rescheduled to '+fmt(h),undoTo(sn));render()}
 function micIcon(){return '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}
 function ico(k){const p={event:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',task:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',note:'<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/>',mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'}[k];
@@ -1019,12 +1053,20 @@ function findSheet(){sheet(`<h2>Find time</h2><input id="fq" placeholder="e.g. f
 function findGo(){const q=$('#fq').value.trim();if(!q)return;const f=findLast=parseFind(q),sl=freeSlots(f);
   sheet(`<h2>Find time</h2><input id="fq" value="${esc(q)}" onkeydown="if(event.key=='Enter')findGo()"><button class="btn" onclick="findGo()">Search again</button><div class="sub" style="margin:10px 0"><b>Understood as:</b> ${esc(f.label)}${f.days?' · weekdays only':''} · at least ${f.len>=60?(f.len/60)+' h':f.len+' min'}${f.notes.map(n=>'<br>⚠️ '+esc(n)).join('')}</div>${sl.length?sl.slice(0,10).map(x=>`<div style="margin-bottom:6px"><b>${dl(x.k)}</b><br><span class="sub">${x.sl.map(([a,b])=>fmt(a)+'–'+fmt(b)).join(' · ')}</span></div>`).join('')+(sl.length>10?`<div class="sub">+${sl.length-10} more days</div>`:''):'<div class="empty">No free time in that period.</div>'}<button class="btn" style="margin-top:10px" onclick="applyFind()">Highlight days in Month</button>`)}
 function applyFind(){const f=findLast;if(!f)return;filtQ=f.label;filtObj={days:f.days||[0,1,2,3,4,5,6],win:f.win,busy:false,from:f.from,to:f.to};cur=P(f.from);close_();view='month';render()}
+let pendMove=null;
+const isRep=t=>!!(t&&t.rec&&t.rec!='none'&&t.sid);
+function askRepeatMove(t,nd,nt,sn){pendMove={id:t.id,nd,nt,sn};sheet(`<h2>Move repeating task</h2><div class="sub" style="margin-bottom:12px">${esc(t.t)} → ${dl(nd)}${nt!=null?' at '+fmt(nt):''}<br>Change only this occurrence, or this and all following?</div><button class="btn alt" style="margin-bottom:8px" onclick="applyRepeatMove(0)">Only this occurrence</button><button class="btn" style="margin-bottom:8px" onclick="applyRepeatMove(1)">This and all following</button><button class="chip" onclick="close_()">Cancel</button>`)}
+function applyRepeatMove(all){const m=pendMove;pendMove=null;const t=m&&tasks.find(x=>x.id==m.id);if(!t){close_();render();return}
+  if(all){t.stime=null;if(m.nd!=t.date)t.occ=m.nd}   /* new time/date becomes the series' own; later occurrences follow from here */
+  else if(m.nt!=t.time&&t.stime==null)t.stime=t.time;   /* only this one: later occurrences keep the old time; its original slot (occ) is kept so the series does not shift */
+  planTask(t,m.nd,m.nt,t.blk);close_();render();synced(all?'Moved this and following':'Moved this occurrence only',undoTo(m.sn))}
 function sheet(h){$('#panel').innerHTML='<button class="xbtn" onclick="closeX()" aria-label="Close">✕</button>'+h;$('#sheet').classList.add('open')}
 const isOpen=()=>$('#sheet').classList.contains('open');
-function close_(){if(D.kind=='note'){const ta=$('#nedit'),n=notes.find(x=>x.id==D.id);if(ta&&n&&ta.value.trim()&&ta.value.trim()!=n.t)n.t=ta.value.trim()}
+function close_(){if(pendMove){pendMove=null;setTimeout(render,0)}   /* cancelled: put the dragged task back */
+if(D.kind=='note'){const ta=$('#nedit'),n=notes.find(x=>x.id==D.id);if(ta&&n&&ta.value.trim()&&ta.value.trim()!=n.t)n.t=ta.value.trim()}
 $('#sheet').classList.remove('open');D={};if(view=='notes')render()}
 $('#sheet').onclick=e=>{if(e.target.id=='sheet')close_()};
-function detail(kind,did,od){if(dragJust||did<0)return;curOcc=od||null;D={kind,id:did};sheet(detHtml())}
+function detail(kind,did,od){if(dragJust)return;if(did<0){if(kind=='task'&&vmap[did])vDetail(vmap[did].bid,vmap[did].date);return}curOcc=od||null;D={kind,id:did};sheet(detHtml())}
 function detHtml(){if(D.kind=='event'){const e=events.find(x=>x.id==D.id);if(!e)return'';
 const sl=blkT(e).map(({t,s})=>`<div class="task" style="--c:${col(t.tag)}"><button class="st" style="--c:${col(t.tag)}" onclick="setP(${t.id},(${t.p}+1)%3)">${SY[t.p]}</button><div class="t ${t.p==2?'done':''}"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${fmt(s)} · ${PN[t.p]}</div></div></div>`).join('');
 return `<div class="sub"><span class="dot" style="background:${ec(e)}"></span>${e.cal} calendar</div><h2>${esc(e.t)}</h2><div style="margin-bottom:12px">${dl(e.day)}${isMulti(e)?' – '+dl(e.endDay)+' · '+(Math.round((P(e.endDay)-P(e.day))/864e5)+1)+' days':''} · ${e.allDay?'All day':fmt(e.s)+'–'+fmt(e.e)}${e.rec!='none'?'<br>Repeats '+e.rec:''}${e.loc?'<br>📍 '+esc(e.loc):''}${e.desc?'<div class="sub" style="margin-top:6px;white-space:pre-wrap">'+esc(e.desc)+'</div>':''}</div>
@@ -1042,7 +1084,7 @@ function openForm(kind,fid,pre,at,fromNote){const arr=kind=='task'?tasks:events,
 let t=it?it.t:pre||'',tag=it?.tag||(kind=='note'?'General':'Uncategorized'),nt='';const m=!it&&t.match(/#(\w+)/);
 if(m){tag=m[1][0].toUpperCase()+m[1].slice(1);t=t.replace(m[0],'').trim()}
 if(kind=='task'&&!L[tag]||kind=='note'&&!nTags().includes(tag)){nt=tag;tag=kind=='note'?'General':'Uncategorized'}
-F={kind,id:fid,from:fromNote||null,allDay:!!it?.allDay,t,tag,nt,icon:it?.icon||'',p:it?.p||0,cal:it?.cal||calActive()[0],loc:it?.loc||'',due:it?.due||'',desc:it?.desc||'',tasks:ev&&it?tasks.filter(x=>x.blk==it.id).map(x=>x.id):[],
+F={kind,id:fid,from:fromNote||null,allDay:!!it?.allDay,t,tag,nt,icon:it?.icon||'',p:it?.p||0,cal:it?.cal||calActive()[0],loc:it?.loc||'',due:it?.due||'',desc:it?.desc||'',newTasks:[],tasks:ev&&it?tasks.filter(x=>x.blk==it.id).map(x=>x.id):[],
 d:ev?(it?.day||iso(TODAY)):(it?.date||''),s:ev?(it?t24(it.s):'10:00'):(it?.time!=null&&it?t24(it.time):''),e:it&&ev?t24(it.e):'11:00',rec:it?.rec||'none',rem:kind=='event'?(it&&it.rem!==undefined?(it.rem===null?'':String(it.rem)):'d'):(it&&it.rem!=null?String(it.rem):'')};
 if(at){F.d=at.d;F.s=t24(at.s);if(ev)F.e=t24(Math.min(at.s+1,23.75))}
 if(ev)F.ed=(it&&!at&&it.endDay&&it.endDay>it.day)?it.endDay:F.d;
@@ -1059,7 +1101,7 @@ let body;
 if(k=='event')body=`<div class="sub">Calendar</div><div class="row">${chips(calActive(),F.cal,'F.cal',x=>CAL[x])}</div>
 <div class="row"><button class="chip ${F.allDay?'on':''}" onclick="snap();F.allDay=!F.allDay;redraw()">All day</button></div><div class="sub">Start date</div><input id="fd" type="date" value="${F.d}" onchange="startDayChg()"><div class="sub">End date</div><input id="fed" type="date" value="${F.ed||F.d}" min="${F.d}" onchange="endDayChg()">${F.allDay?'':`<div class="row"><input id="fs" type="time" value="${F.s}" onchange="startChg()" style="flex:1;margin:0"><input id="fe" type="time" value="${F.e}" style="flex:1;margin:0"></div>`}${rep}
 ${remSel}<input id="fl" placeholder="Location" value="${esc(F.loc)}" oninput="locSug()" autocomplete="off"><div id="lsug"></div><textarea id="fdsc" placeholder="Description" style="min-height:70px">${esc(F.desc)}</textarea>
-${F.allDay?'':`<div class="sub">Tasks in this event</div><div class="tray" style="margin-bottom:8px">${F.tasks.map(i=>{const t=tasks.find(x=>x.id==i);return t?`<span class="tchip" style="--c:${col(t.tag)}"><b class="sy">${SY[t.p]}</b> ${esc(t.t)} <button onclick="snap();F.tasks=F.tasks.filter(x=>x!=${i});redraw()" aria-label="Remove">✕</button></span>`:''}).join('')||'<span class="sub">None yet</span>'}</div>
+${F.allDay?'':`<div class="sub">Tasks in this event</div><div class="tray" style="margin-bottom:8px">${(F.newTasks||[]).map((n,i)=>`<span class="tchip" style="--c:${col(n.tag)}"><b class="sy">${SY[0]}</b> ${esc(n.t)} <span class="sub">new</span> <button onclick="snap();F.newTasks.splice(${i},1);redraw()" aria-label="Remove">✕</button></span>`).join('')}${F.tasks.map(i=>{const t=tasks.find(x=>x.id==i);return t?`<span class="tchip" style="--c:${col(t.tag)}"><b class="sy">${SY[t.p]}</b> ${esc(t.t)} <button onclick="snap();F.tasks=F.tasks.filter(x=>x!=${i});redraw()" aria-label="Remove">✕</button></span>`:''}).join('')||((F.newTasks||[]).length?'':'<span class="sub">None yet</span>')}</div><div class="row" style="margin-bottom:8px"><input id="fnewt" placeholder="New task for this event…" onkeydown="if(event.key=='Enter'){event.preventDefault();addNewTask()}"><select id="fnewtag" style="max-width:40%">${Object.keys(L).map(k=>`<option value="${esc(k)}" ${(F.ntag||(filt!='All'?filt:Object.keys(L)[0]))==k?'selected':''}>${esc(tl(k))}</option>`).join('')}</select><button class="chip" onclick="addNewTask()">＋ Add</button></div>
 <button class="chip" style="margin-bottom:10px" onclick="startPick()">+ Add tasks</button>`}`;
 else if(k=='task')body=`<div class="row">${[0,1,2].map(i=>`<button class="chip ${F.p==i?'on':''}" onclick="snap();F.p=${i};redraw()">${SY[i]} ${PN[i]}</button>`).join('')}</div>
 <div class="row">${ICONS.map(i=>`<button class="ic ${F.icon==i?'on':''}" onclick="snap();F.icon=F.icon=='${i}'?'':'${i}';redraw()">${ic(i)}</button>`).join('')}</div>
@@ -1076,8 +1118,10 @@ if(nt){tag=nt;if(k=='task'&&!L[nt]){L[nt]=PAL[Object.keys(L).length%4];createTas
 if(k=='task'){const o=F.id&&tasks.find(x=>x.id==F.id),d=F.d||(F.rec!='none'?iso(TODAY):null),tm=d&&F.s?hh(F.s):null;
 if(o){const was0=o.p;logMove(o,d,tm);if(o.blk&&o.date!=d)o.blk=null;Object.assign(o,{t,tag,icon:F.icon,p:F.p,date:d,time:tm,rec:F.rec,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem});if(o.rec!='none'){o.sid=o.sid||newSid();o.occ=o.occ||o.date}if(o.p==2&&was0!=2)o.doneAt=Date.now();if(o.p==2&&was0!=2&&o.rec!='none')spawnNext(o);updateTask(o)}else{const nw={id:id++,t,tag,icon:F.icon,p:F.p,date:d,time:tm,blk:null,rec:F.rec,sid:F.rec!='none'?newSid():null,occ:F.rec!='none'?d:null,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem};tasks.unshift(nw);createTask(nw)}}
 else if(k=='event'){const ad=F.allDay,s=ad?0:hh(F.s),e=ad?24:hh(F.e);const ed=F.ed&&F.ed>F.d?F.ed:F.d;if(F.ed&&F.d&&F.ed<F.d)return toast('End date cannot be before the start date');if(ed>F.d&&F.rec&&F.rec!='none')return toast('Multi-day events cannot repeat');if((!ad&&ed==F.d&&!(e>s))||!F.d)return toast('Check date and times');const v={t,cal:F.cal,day:F.d,endDay:ed,s,e,allDay:ad,rec:F.rec,loc:F.loc.trim(),desc:F.desc.trim(),rem:F.rem=='d'?undefined:(F.rem===''?null:+F.rem)},o=F.id&&events.find(x=>x.id==F.id);let ev=o;
-if(o){Object.assign(o,v);updateCalendarEvent(o)}else{ev={id:id++,...v};events.push(ev);createCalendarEvent(ev)}
-assignTasksToEvent(ev,ad?[]:F.tasks)}
+let evP=null;if(o){Object.assign(o,v);updateCalendarEvent(o)}else{ev={id:id++,...v};events.push(ev);evP=createCalendarEvent(ev)}
+if(!ad){const pt=($('#fnewt')||{}).value;if(pt&&pt.trim())(F.newTasks=F.newTasks||[]).push({t:pt.trim(),tag:($('#fnewtag')||{}).value||Object.keys(L)[0]})}
+const fresh=ad?[]:(F.newTasks||[]).filter(n=>n.tag).map(n=>({id:id++,t:n.t,tag:n.tag,icon:'',p:0,date:ev.day,time:null,blk:null,rec:'none',sid:null,occ:null,due:null,desc:'',hist:[]}));fresh.forEach(x=>tasks.unshift(x));
+assignTasksToEvent(ev,ad?[]:[...F.tasks,...fresh.map(x=>x.id)],evP,fresh)}
 else addNotes(t,tag);
 if(F.from){const fn=notes.find(n=>n.id==F.from);notes.forEach(n=>{if(fn&&n.parent==fn.id)n.parent=fn.parent||null});notes=notes.filter(n=>n.id!=F.from)}
 close_();synced(k=='note'?(lastN>1?lastN+' notes created':'Note saved'):'Saved & synced to Google '+(k=='task'?'Tasks':'Calendar')+msg+(F.from?' · note removed':''),undoTo(sn0));render()}
@@ -1108,6 +1152,15 @@ function removeItems(kind,i,mode){const sn=snapState(),fns=[],relink=[];
     else if(e.rec&&e.rec!='none'&&mode=='following'&&od>e.day){rem=[];e.until=iso(add(P(od),-1));fns.push(()=>endCalendarSeries(e,{day:od,s:e.s,allDay:e.allDay,cal:e.cal}))}
     else fns.push(()=>deleteCalendarEvent(e));
     gone=gone.concat(rem.map(x=>x.id));
+    if(isRecEv(e)){   /* repeating event: its tasks go with it (this instance / this and following / whole series) */
+      const ids=e.rid?events.filter(x=>x.rid==e.rid&&x.cal==e.cal).map(x=>x.id):[e.id],gone2=new Set();
+      tasks.filter(t=>ids.includes(t.blk)).forEach(t=>{const open=t.p<2&&t.rec&&t.rec!='none'&&t.sid;
+        if(mode=='all'){gone2.add(t);return}
+        if(mode=='this'){if(t.date==od){if(open&&nextOcc(t)<'9999'){skipTo(t);const be=blkEvFor(t,t.date);t.blk=be?be.id:null;relink.push(t.id);updateTask(t)}else gone2.add(t)}else if(open&&t.date<od&&!(t.skip||[]).includes(od)){t.skip=[...(t.skip||[]),od];relink.push(t.id);updateTask(t)}return}
+        if(t.date&&t.date>=od){gone2.add(t);return}   /* following */
+        if(open){const u=parseRule(t.rec);if(u){u.until=iso(add(P(od),-1));t.rec=recBuild(u);relink.push(t.id);updateTask(t)}}});
+      gone2.forEach(t=>fns.push(()=>deleteTask(t)));tasks=tasks.filter(t=>!gone2.has(t));
+    }
     tasks.forEach(t=>{if(gone.includes(t.blk)){relink.push(t.id);t.blk=null;updateTask(t)}});
     events=events.filter(x=>!rem.includes(x));
   }
