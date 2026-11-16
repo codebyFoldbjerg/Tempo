@@ -361,7 +361,7 @@ function taskFromGoogle(g,tag,listId){
   else if(/^\d{4}-\d{2}-\d{2}$/.test(meta['⚑']||''))due=meta['⚑'];   /* legacy: due = planned date, deadline in notes */
   if(meta['📅'])blkGid=meta['📅'];
   let icon='',title=g.title||'';const ic0=['📞','⚠️'].find(i=>title.startsWith(i+' '));if(ic0){icon=ic0;title=title.slice(ic0.length+1)}
-  return{id:id++,gid:g.id,gl:listId,t:title,tag,icon,p,date,time,blk:null,blkGid,rec,rem,due,sid:meta.s_series||null,occ:/^\d{4}-\d{2}-\d{2}$/.test(meta.s_occurrence||'')?meta.s_occurrence:null,skip:(meta.s_skip||'').split(',').filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)),desc:desc.join('\n'),hist};
+  return{id:id++,gid:g.id,gl:listId,t:title,tag,icon,p,doneAt:g.completed?Date.parse(g.completed)||null:null,date,time,blk:null,blkGid,rec,rem,due,sid:meta.s_series||null,occ:/^\d{4}-\d{2}-\d{2}$/.test(meta.s_occurrence||'')?meta.s_occurrence:null,skip:(meta.s_skip||'').split(',').filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)),desc:desc.join('\n'),hist};
 }
 
 /* ---- 4. READ: calendars, task lists, events, tasks ----------------------- */
@@ -679,7 +679,7 @@ function spawnNext(t){
   nw={id:id++,t:t.t,tag:t.tag,icon:t.icon,p:0,date:nd,time:t.time,blk:null,rec:t.rec,rem:t.rem,desc:t.desc,hist:[],due:off==null?null:iso(add(P(nd),off)),sid:t.sid,occ:nd,skip:(t.skip||[]).filter(x=>x>=td)};
   tasks.unshift(nw);Promise.resolve(createTask(nw)).finally(()=>spawnLock.delete(key));return nw}
 function setP(i,p){const sn=snapState(),t=tasks.find(x=>x.id==i);if(!t)return;
-const was=t.p;t.p=p;let nx=null;
+const was=t.p;t.p=p;if(p==2&&was!=2)t.doneAt=Date.now();let nx=null;
 if(p==2&&was!=2&&t.rec&&t.rec!='none'&&t.occ)nx=spawnNext(t);
 const undo=()=>{undoTo(sn)();if(nx&&nx.gid)deleteTask(nx);const t0=tasks.find(x=>x.id==i);if(t0)updateTask(t0)};
 if(nx)synced('Done. Next repeat created for '+dl(nx.date),undo);else synced('Synced to '+t.tag+' list: Status '+PN[p],nx===null&&p==2&&was!=2&&t.rec&&t.rec!='none'?undo:undoTo(sn));
@@ -707,7 +707,7 @@ const srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=
 const vo=(!pm&&!taskMode)?futureOcc().filter(o=>(filt=='All'||o.tag==filt)&&(!lim||o.date<=lim)).map(o=>({...o,p:0})):[];
 const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',op.filter(t=>!t.date&&t.tag=='Uncategorized')]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
-const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
+const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=n=='Completed'?[...a].sort((x,y)=>(y.doneAt||0)-(x.doneAt||0)||(y.date||'').localeCompare(x.date||'')):srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
 const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${body(n,a)}`).join('');
 const bar=pm?`<div class="pickbar"><span>Select tasks (${pickSel.size})</span><span><button class="chip" onclick="cancelPick()">Cancel</button> <button class="chip" style="font-weight:700" onclick="confirmPick()">Confirm</button></span></div>`
 :taskMode?`<div class="pickbar"><span>${taskSelIds.size} selected</span><span><button class="chip" onclick="taskMode=false;render()">Cancel</button> <button class="chip" onclick="moveSel('${iso(TODAY)}')">Today</button> <button class="chip" onclick="taskDateSheet()">Date…</button></span></div>`:'';
@@ -1074,7 +1074,7 @@ return `<h2>${ed?'Edit':'New'} ${k}</h2>${k=='note'?`<textarea id="ft" placehold
 function save(){const sn0=snapState();snap();const t=F.t.trim(),k=F.kind;if(!t)return toast('Add some text');let tag=F.tag,msg='';const nt=(F.nt||'').trim();if(k=='task'&&nt&&!L[nt]&&!F.okNew){sheet(`<h2>Create new category?</h2><div class="sd" style="margin-bottom:14px">“${esc(nt)}” does not exist yet. Adding this task also creates a new list “${esc(nt)}” in Google Tasks.</div><div class="row"><button class="btn alt" onclick="redraw()">Cancel</button><button class="btn" style="flex:1;width:auto" onclick="F.okNew=true;save()">Create and add</button></div>`);return}
 if(nt){tag=nt;if(k=='task'&&!L[nt]){L[nt]=PAL[Object.keys(L).length%4];createTaskList(nt);msg=' · new list “'+nt+'” created'}}
 if(k=='task'){const o=F.id&&tasks.find(x=>x.id==F.id),d=F.d||(F.rec!='none'?iso(TODAY):null),tm=d&&F.s?hh(F.s):null;
-if(o){const was0=o.p;logMove(o,d,tm);if(o.blk&&o.date!=d)o.blk=null;Object.assign(o,{t,tag,icon:F.icon,p:F.p,date:d,time:tm,rec:F.rec,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem});if(o.rec!='none'){o.sid=o.sid||newSid();o.occ=o.occ||o.date}if(o.p==2&&was0!=2&&o.rec!='none')spawnNext(o);updateTask(o)}else{const nw={id:id++,t,tag,icon:F.icon,p:F.p,date:d,time:tm,blk:null,rec:F.rec,sid:F.rec!='none'?newSid():null,occ:F.rec!='none'?d:null,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem};tasks.unshift(nw);createTask(nw)}}
+if(o){const was0=o.p;logMove(o,d,tm);if(o.blk&&o.date!=d)o.blk=null;Object.assign(o,{t,tag,icon:F.icon,p:F.p,date:d,time:tm,rec:F.rec,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem});if(o.rec!='none'){o.sid=o.sid||newSid();o.occ=o.occ||o.date}if(o.p==2&&was0!=2)o.doneAt=Date.now();if(o.p==2&&was0!=2&&o.rec!='none')spawnNext(o);updateTask(o)}else{const nw={id:id++,t,tag,icon:F.icon,p:F.p,date:d,time:tm,blk:null,rec:F.rec,sid:F.rec!='none'?newSid():null,occ:F.rec!='none'?d:null,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem};tasks.unshift(nw);createTask(nw)}}
 else if(k=='event'){const ad=F.allDay,s=ad?0:hh(F.s),e=ad?24:hh(F.e);const ed=F.ed&&F.ed>F.d?F.ed:F.d;if(F.ed&&F.d&&F.ed<F.d)return toast('End date cannot be before the start date');if(ed>F.d&&F.rec&&F.rec!='none')return toast('Multi-day events cannot repeat');if((!ad&&ed==F.d&&!(e>s))||!F.d)return toast('Check date and times');const v={t,cal:F.cal,day:F.d,endDay:ed,s,e,allDay:ad,rec:F.rec,loc:F.loc.trim(),desc:F.desc.trim(),rem:F.rem=='d'?undefined:(F.rem===''?null:+F.rem)},o=F.id&&events.find(x=>x.id==F.id);let ev=o;
 if(o){Object.assign(o,v);updateCalendarEvent(o)}else{ev={id:id++,...v};events.push(ev);createCalendarEvent(ev)}
 assignTasksToEvent(ev,ad?[]:F.tasks)}
