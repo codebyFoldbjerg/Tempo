@@ -122,7 +122,7 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .sec{border:1px solid var(--line);border-radius:16px;padding:4px 14px 14px;margin-bottom:14px}
 .sh{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);margin:12px 0 4px}
 .sd{color:var(--mute);font-size:12.5px;line-height:1.4;margin:8px 0 6px}
-.note .gh2{flex:none;touch-action:none;cursor:grab;padding:4px 2px 4px 10px;color:var(--mute);line-height:1;user-select:none}
+.note .gh2{flex:none;touch-action:none;cursor:grab;display:grid;place-items:center;width:44px;min-width:44px;height:44px;margin:-8px 0 -8px -6px;padding:0;border-radius:10px;color:var(--mute);font-size:20px;line-height:1;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;background:color-mix(in srgb,var(--ink) 6%,transparent)}.note .gh2:active{background:color-mix(in srgb,var(--ink) 16%,transparent)}
 .drop{outline:2px solid #2F6FED;outline-offset:-2px;background:color-mix(in srgb,#2F6FED 10%,transparent)}
 /* ---- LAYOUT REFINEMENTS (approved) ---- */
 .nav button.on span{background:color-mix(in srgb,var(--ink) 11%,transparent);border-radius:12px;padding:2px 16px}
@@ -134,7 +134,7 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .hr{border-top-color:color-mix(in srgb,var(--line) 55%,transparent)}.now::before{content:"";position:absolute;left:-4px;top:-4px;width:9px;height:9px;border-radius:50%;background:#E5484D}.ev{border-radius:12px}
 .fab{width:54px;height:54px;border-radius:18px;font-size:28px;bottom:calc(86px + env(safe-area-inset-bottom,0px))}body{padding-bottom:116px}
 .pickbar{flex-wrap:wrap;gap:8px}
-.note.dragmode{touch-action:none;cursor:grab;outline:1px dashed var(--line);outline-offset:-1px}
+.note.dragmode{touch-action:pan-y;cursor:default;outline:1px dashed var(--line);outline-offset:-1px}.note.ndrag{opacity:.35;transform:scale(.98);background:color-mix(in srgb,var(--ink) 8%,transparent);transition:opacity .12s,transform .12s}body.nd-active{user-select:none;-webkit-user-select:none;cursor:grabbing}.note.drop{outline:3px solid #2F6FED;outline-offset:-3px;background:color-mix(in srgb,#2F6FED 16%,transparent);border-radius:8px}.card.drop{outline:3px dashed #14A38B;outline-offset:-3px;background:color-mix(in srgb,#14A38B 10%,transparent)}.ghost.nd{display:flex;flex-direction:column;gap:2px;box-shadow:0 8px 24px #0005;padding:8px 14px;transform:scale(1.02)}.ghost.nd small{font-size:11.5px;font-weight:600;color:var(--mute);overflow:hidden;text-overflow:ellipsis}
 .opts{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:10px;margin-top:8px}
 .opt{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:88px;padding:12px 4px}
 .opt .oi{display:grid;place-items:center;width:30px;height:30px;font-style:normal;font-size:26px;line-height:1}
@@ -152,9 +152,9 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .rembar{pointer-events:auto;display:flex;align-items:center;gap:8px;background:var(--acc);color:var(--onacc);border-radius:16px;padding:10px 12px;box-shadow:0 8px 24px #0004;max-width:560px;width:100%;margin:0 auto}
 .rembar .rt{flex:1;min-width:0}.rembar .rt b,.rembar .rt span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rembar .rt span{font-size:12px;opacity:.8}.rembar .chip{color:var(--ink);flex:none}
 .dayn{font-size:10px;opacity:.75;margin-left:4px;font-weight:500;white-space:nowrap}
-.cell.evm{overflow:visible}.mbar{display:block;flex:none;align-self:stretch;position:relative;z-index:1;height:13px;min-height:13px;margin:1px -3px 0;font-size:9.5px;line-height:13px;background:color-mix(in srgb,var(--c) 85%,var(--card));color:#fff;white-space:nowrap}
+.cell.evm{overflow:visible}.mbar{display:block;flex:none;align-self:stretch;position:relative;z-index:1;height:13px;min-height:13px;margin:1px -3px 0;font-size:9.5px;line-height:13px;background:color-mix(in srgb,var(--c) 85%,var(--card));color:var(--ink);white-space:nowrap}
 .mbar.mbs{margin-left:-1px;border-radius:7px 0 0 7px}.mbar.mbe{margin-right:-1px;border-radius:0 7px 7px 0}.mbar.mbs.mbe{border-radius:7px}.mbar.mbl{margin-left:-5px}.mbar.mbr{margin-right:-5px}
-.mbar.sp{background:none;visibility:hidden}.mbt{display:block;height:13px;position:absolute;left:0;top:0;z-index:3;font-style:normal;padding-left:5px;overflow:hidden;text-overflow:ellipsis;width:calc(var(--len)*100% + (var(--len) - 1)*8px);text-shadow:0 0 2px #0006}
+.mbar.sp{background:none;visibility:hidden}.mbt{display:block;height:13px;position:absolute;left:0;top:0;z-index:3;font-style:normal;padding-left:5px;overflow:hidden;text-overflow:ellipsis;width:calc(var(--len)*100% + (var(--len) - 1)*8px);color:inherit;text-shadow:none}
 .task.virt,.adev.virt,.pill.virt{border-style:dashed;opacity:.85}.task.virt .st{font-size:15px}
 .sy,.st,.tchip .sy,.pill .sy{text-decoration:none!important}.done .sy{text-decoration:none!important;opacity:1}.tgn{color:color-mix(in srgb,var(--c) 78%,var(--ink));font-weight:700}.tcrow input.tcn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:inherit;font:inherit}</style></head><body>
 <header><button class="gear" id="gear" onclick="settingsSheet()" aria-label="Settings">⚙︎</button><div><h1 id="ttl">Tempo</h1><div class="sub" id="sub"></div></div><div class="right"><div class="sync" id="sum"></div><div class="sync" id="syn" style="justify-content:flex-end"></div></div></header>
@@ -596,7 +596,7 @@ const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const dl=s=>P(s).toLocaleDateString('en',{weekday:'short',day:'numeric',month:'short'});
 let cur=new Date(TODAY),id=100,tt,queued=0;
 let notes=loadSeedNotes();
-let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='all',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='events',view='today',filt='All',sortBy='tag',showDone=false,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
+let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='week',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='events',view='today',filt='All',sortBy='tag',showDone=false,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
 const col=t=>(S.tagColors&&S.tagColors[t])||L[t]||'#6B7587',CAL_ADJ={'#8e24aa':'#9A1FA6','#b39ddb':'#9F8CF2'},ec=e=>{if(e.hol)return '#9AA3B2';const c=CAL[e.cal]||'#4285F4';return CAL_ADJ[c.toLowerCase()]||c};
 const nTags=()=>[...new Set(['General',...notes.map(n=>n.tag)])].sort();
 const fmt=h=>{const H=Math.floor(h),m=Math.round((h-H)*60);return H+':'+String(m).padStart(2,'0')};
@@ -727,7 +727,8 @@ function vTasks(){const pm=pickMode,td=iso(TODAY),lim=planRange=='week'?iso(add(
 base=tasks.filter(t=>(filt=='All'||t.tag==filt)&&(!lim||(t.date&&t.date<=lim&&(t.p<2||t.date>=td)))),op=base.filter(t=>t.p<2);
 const _et=new Map(),et=x=>{if(!_et.has(x))_et.set(x,x.time??(blkInfo(x)||{}).s??25);return _et.get(x)},srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=='status'?x.p-y.p:sortBy=='date'?(x.date||'9999').localeCompare(y.date||'9999')||et(x)-et(y):x.t.localeCompare(y.t));
 const vo=(!pm&&!taskMode)?futureOcc().filter(o=>(filt=='All'||o.tag==filt)&&(!lim||o.date<=lim)).map(o=>({...o,p:0})):[];
-const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',op.filter(t=>!t.date&&t.tag=='Uncategorized')]];
+const _un=new Set(),unc=[...op.filter(t=>!t.date&&t.tag=='Uncategorized'),...(planRange=='week'?tasks.filter(t=>t.p<2&&!t.date&&t.tag=='Uncategorized'&&(filt=='All'||t.tag==filt)):[])].filter(t=>_un.has(t.id)?false:(_un.add(t.id),true));   /* One Week hides undated tasks, so undated Uncategorized ones are added here; the Set prevents duplicates */
+const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',unc]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
 const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=n=='Completed'?[...a].sort((x,y)=>(y.doneAt||0)-(x.doneAt||0)||(y.date||'').localeCompare(x.date||'')):srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
 const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${body(n,a)}`).join('');
@@ -739,11 +740,11 @@ return bar+`<div class="chips">${['All',...Object.keys(L)].map(k=>`<button class
 ${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button>`}</div>
 ${list||'<div class="empty">No tasks here yet. Tap + to add one.</div>'}</div>`}
 function vNotes(){const vis=n=>showHold||!n.hold,tg=nTags().filter(t=>(!nSel.size||nSel.has(t))&&notes.some(n=>n.tag==t&&vis(n)));
-const row=(n,dp,L)=>`<div class="note ${n.hold?'held':''} ${noteSelIds.has(n.id)?'sel':''} ${noteDragOn?'dragmode':''}" data-nid="${n.id}" style="margin-left:${Math.min(dp,4)*18}px" onpointerdown="npDown(${n.id})" onpointerup="npUp()" onpointerleave="npUp()" onpointercancel="npUp()" oncontextmenu="return false" onclick="noteClick(${n.id})"><span class="bl">${noteMode?(noteSelIds.has(n.id)?'☑':'☐'):(dp?'◦':'•')}</span><span>${esc(n.t)}</span>${n.hold?`<span class="hi" title="On hold">${pauseIcon(14)}</span>`:''}</div>`+L.filter(c=>c.parent==n.id).sort((a,b)=>b.ts-a.ts).map(c=>row(c,dp+1,L)).join('');
+const row=(n,dp,L)=>`<div class="note ${n.hold?'held':''} ${noteSelIds.has(n.id)?'sel':''} ${noteDragOn?'dragmode':''}" data-nid="${n.id}" style="margin-left:${Math.min(dp,4)*18}px" onpointerdown="npDown(${n.id})" onpointerup="npUp()" onpointerleave="npUp()" onpointercancel="npUp()" oncontextmenu="return false" onclick="noteClick(${n.id})">${noteDragOn?`<span class="gh2" data-nh="${n.id}" role="button" aria-label="Drag note" title="Drag to move" onclick="event.stopPropagation()">\u283F</span>`:''}<span class="bl">${noteMode?(noteSelIds.has(n.id)?'☑':'☐'):(dp?'◦':'•')}</span><span>${esc(n.t)}</span>${n.hold?`<span class="hi" title="On hold">${pauseIcon(14)}</span>`:''}</div>`+L.filter(c=>c.parent==n.id).sort((a,b)=>b.ts-a.ts).map(c=>row(c,dp+1,L)).join('');
 const sec=tg.map(t=>{const L=notes.filter(n=>n.tag==t&&vis(n)),ids=new Set(L.map(n=>n.id)),roots=L.filter(n=>!n.parent||!ids.has(n.parent)).sort((a,b)=>b.ts-a.ts);
 return `<div class="card" data-tag="${esc(t)}"><h3 class="nth" data-t="${esc(t)}" onclick="newNoteIn(this.dataset.t)">${esc(t)} <span class="sub">${L.length}</span></h3>${roots.map(n=>row(n,0,L)).join('')}</div>`}).join('');
 const bar=noteMode?`<div class="pickbar"><span>${noteSelIds.size} selected</span><span><button class="chip" onclick="noteMode=false;render()">Cancel</button> <button class="chip" style="font-weight:700" onclick="copyNotes()">Copy</button> <button class="chip" style="font-weight:700;color:#E5484D" onclick="deleteSelected()">Delete all selected</button></span></div>`:'';
-return bar+`<div class="chips">${nTags().map(t=>`<button class="chip ${nSel.has(t)?'on':''}" onclick="nSel.has('${t}')?nSel.delete('${t}'):nSel.add('${t}');render()">${esc(t)}</button>`).join('')}<button class="chip ${showHold?'on':''}" onclick="showHold=!showHold;render()">Show on hold</button><button class="chip ${noteDragOn?'on':''}" onclick="noteDragOn=!noteDragOn;noteMode=false;render()" aria-label="Drag mode" title="Drag notes">⋮⋮</button></div><div class="pad">${sec||'<div class="empty">No notes to show. Tap + to add one.</div>'}${noteDragOn?'<div class="sd" style="text-align:center">Drag mode is on: drag a note onto a tag to move it, or onto another note to indent it.</div>':''}</div>`}
+return bar+`<div class="chips">${nTags().map(t=>`<button class="chip ${nSel.has(t)?'on':''}" onclick="nSel.has('${t}')?nSel.delete('${t}'):nSel.add('${t}');render()">${esc(t)}</button>`).join('')}<button class="chip ${showHold?'on':''}" onclick="showHold=!showHold;render()">Show on hold</button><button class="chip ${noteDragOn?'on':''}" onclick="noteDragOn=!noteDragOn;noteMode=false;render()" aria-label="Drag mode" title="Drag notes">⋮⋮</button></div><div class="pad">${sec||'<div class="empty">No notes to show. Tap + to add one.</div>'}${noteDragOn?'<div class="sd" style="text-align:center">Drag mode is on: press and hold the \u283F handle, then drag a note onto a tag to move it, or onto the middle of another note to indent it. Swipe anywhere else to scroll.</div>':''}</div>`}
 function noteMenu(i){const n=notes.find(x=>x.id==i);D={kind:'note',id:i};
 sheet(`<div class="sub">${esc(n.tag)}${n.hold||tagHold.has(n.tag)?' · on hold':''}</div><textarea id="nedit" style="min-height:90px;margin-top:6px">${esc(n.t)}</textarea><div class="sub" style="margin:-4px 0 10px">Edit directly. Changes are saved when you tap outside.</div>
 <div class="opts"><button class="opt" onclick="close_();openForm('task',null,notes.find(x=>x.id==${i}).t,null,${i})">✓<span>Task</span></button><button class="opt" onclick="close_();openForm('event',null,notes.find(x=>x.id==${i}).t,null,${i})">▦<span>Event</span></button><button class="opt" onclick="holdNote(${i})">${n.hold?playIcon(26):pauseIcon(26)}<span>${n.hold?'Resume':'On hold'}</span></button><button class="opt" style="color:#E5484D" onclick="discard(${i})">✕<span>Discard</span></button></div>`)}
@@ -937,13 +938,23 @@ notes.forEach(n=>{let p=n.parent;while(p&&ids.has(p)){const pn=before.find(x=>x.
 noteMode=false;noteSelIds=new Set();render();toast('Deleted '+ids.size+' note'+(ids.size==1?'':'s'),()=>{notes=before;render()})}
 function snapState(){return JSON.stringify({tasks,events,notes})}
 function undoTo(s){return()=>{const o=JSON.parse(s);tasks=o.tasks;events=o.events;notes=o.notes;render();if(isOpen()&&(D.kind=='task'||D.kind=='event'))sheet(detHtml())}}
-function ndStart(el,x,y){ndState={id:+el.dataset.nid,x0:x,y0:y,g:null,tgt:null,on:false}}
-function ndMove(x,y){const s=ndState;if(!s)return;
-if(!s.on){if(Math.hypot(x-s.x0,y-s.y0)<8)return;const n=notes.find(q=>q.id==s.id);if(!n){ndState=null;return}s.on=true;const g=document.createElement('div');g.className='ghost on';g.textContent=n.t;document.body.appendChild(g);s.g=g}
-s.g.style.top=(y-20)+'px';document.querySelectorAll('.drop').forEach(q=>q.classList.remove('drop'));s.tgt=null;
+function ndStart(el,x,y){const h=el.closest('.note[data-nid]');if(!h)return;ndState={id:+h.dataset.nid,x0:x,y0:y,g:null,tgt:null,on:false,el:h,y:y,x:x,lastNote:null}}
+function ndAuto(){const s=ndState;if(!s||!s.on)return;if(s.y<90)scrollBy(0,-10);else if(s.y>innerHeight-110)scrollBy(0,10);ndHit(s.x,s.y);requestAnimationFrame(ndAuto)}
+function ndHit(x,y){const s=ndState;if(!s||!s.on)return;
+s.g.style.top=Math.max(4,y-44)+'px';document.querySelectorAll('.drop').forEach(q=>q.classList.remove('drop'));let tgt=null,lbl='Release to cancel';
 const el=document.elementFromPoint(x,y),nr=el&&el.closest('.note[data-nid]'),cd=el&&el.closest('.card[data-tag]');
-if(nr&&+nr.dataset.nid!=s.id){nr.classList.add('drop');s.tgt={type:'note',id:+nr.dataset.nid}}else if(cd){cd.classList.add('drop');s.tgt={type:'tag',tag:cd.dataset.tag}}}
-function ndEnd(){const s=ndState;if(!s)return;ndState=null;if(!s.on)return;s.g.remove();document.querySelectorAll('.drop').forEach(q=>q.classList.remove('drop'));dragJust=true;setTimeout(()=>{dragJust=false},350);if(!s.tgt)return;
+if(nr&&+nr.dataset.nid!=s.id){   /* hit-test by the finger position: only the middle band of a row indents, the edges never change the target by accident */
+  const r=nr.getBoundingClientRect(),f=(y-r.top)/Math.max(1,r.height),nid=+nr.dataset.nid;
+  if(f>=.25&&f<=.75||s.lastNote===nid&&f>=.1&&f<=.9){tgt={type:'note',id:nid};s.lastNote=nid;nr.classList.add('drop');const pn=notes.find(q=>q.id==nid);lbl='Indent under: '+(pn?pn.t:'')}
+  else s.lastNote=null}
+else if(nr){s.lastNote=null}   /* over the dragged note itself: no target */
+else if(cd){s.lastNote=null;tgt={type:'tag',tag:cd.dataset.tag};cd.classList.add('drop');lbl='Move to: '+cd.dataset.tag}
+else s.lastNote=null;
+s.tgt=tgt;const sm=s.g.querySelector('small');if(sm)sm.textContent=lbl}
+function ndMove(x,y){const s=ndState;if(!s)return;s.x=x;s.y=y;
+if(!s.on){if(Math.hypot(x-s.x0,y-s.y0)<8)return;const n=notes.find(q=>q.id==s.id);if(!n){ndState=null;return}s.on=true;const g=document.createElement('div');g.className='ghost on nd';const b=document.createElement('b');b.textContent=n.t;b.style.cssText='overflow:hidden;text-overflow:ellipsis';const sm=document.createElement('small');g.appendChild(b);g.appendChild(sm);document.body.appendChild(g);s.g=g;document.body.classList.add('nd-active');if(s.el)s.el.classList.add('ndrag');if(navigator.vibrate)navigator.vibrate(10);requestAnimationFrame(ndAuto)}
+ndHit(x,y)}
+function ndEnd(){const s=ndState;if(!s)return;ndState=null;document.body.classList.remove('nd-active');if(!s.on)return;s.g.remove();if(s.el)s.el.classList.remove('ndrag');document.querySelectorAll('.drop').forEach(q=>q.classList.remove('drop'));dragJust=true;setTimeout(()=>{dragJust=false},350);if(!s.tgt)return;
 const sn=snapState(),n=notes.find(q=>q.id==s.id),ds=[];let st=[n.id];while(st.length){const c=st.pop();notes.filter(q=>q.parent==c).forEach(q=>{ds.push(q.id);st.push(q.id)})}
 if(s.tgt.type=='note'){const p=notes.find(q=>q.id==s.tgt.id);if(!p||ds.includes(p.id))return;n.parent=p.id;n.tag=p.tag;toast('Indented under another note',undoTo(sn))}else{n.parent=null;n.tag=s.tgt.tag;toast('Moved to '+n.tag,undoTo(sn))}
 notes.forEach(q=>{if(ds.includes(q.id))q.tag=n.tag});render()}
@@ -1175,10 +1186,12 @@ document.addEventListener('touchend',dragEnd);
 document.addEventListener('mousedown',e=>{const el=e.target.closest('[data-dk]');if(el&&view=='today'&&!isOpen())dragStart(el,e.clientY)});
 document.addEventListener('mousemove',e=>{if(dragState)dragMove(e.clientY)});
 document.addEventListener('mouseup',dragEnd);
-document.addEventListener('touchstart',e=>{const h=e.target.closest('.note.dragmode');if(h)ndStart(h,e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
+let ndTouchT=0;
+document.addEventListener('touchstart',e=>{const h=e.target.closest('.note.dragmode .gh2');if(h){ndTouchT=Date.now();ndStart(h,e.touches[0].clientX,e.touches[0].clientY)}},{passive:true});
 document.addEventListener('touchmove',e=>{if(ndState){ndMove(e.touches[0].clientX,e.touches[0].clientY);if(ndState&&ndState.on)e.preventDefault()}},{passive:false});
 document.addEventListener('touchend',ndEnd);
-document.addEventListener('mousedown',e=>{const h=e.target.closest('.note.dragmode');if(h)ndStart(h,e.clientX,e.clientY)});
+document.addEventListener('touchcancel',ndEnd);
+document.addEventListener('mousedown',e=>{if(Date.now()-ndTouchT<800)return;const h=e.target.closest('.note.dragmode .gh2');if(h)ndStart(h,e.clientX,e.clientY)});
 document.addEventListener('mousemove',e=>{if(ndState)ndMove(e.clientX,e.clientY)});
 document.addEventListener('mouseup',ndEnd);
 let x0,y0,tgt;
