@@ -156,7 +156,7 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .mbar.mbs{margin-left:-1px;border-radius:7px 0 0 7px}.mbar.mbe{margin-right:-1px;border-radius:0 7px 7px 0}.mbar.mbs.mbe{border-radius:7px}.mbar.mbl{margin-left:-5px}.mbar.mbr{margin-right:-5px}
 .mbar.sp{background:none;visibility:hidden}.mbt{display:block;height:13px;position:absolute;left:0;top:0;z-index:3;font-style:normal;padding-left:5px;overflow:hidden;text-overflow:ellipsis;width:calc(var(--len)*100% + (var(--len) - 1)*8px);text-shadow:0 0 2px #0006}
 .task.virt,.adev.virt,.pill.virt{border-style:dashed;opacity:.85}.task.virt .st{font-size:15px}
-</style></head><body>
+.sy,.st,.tchip .sy,.pill .sy{text-decoration:none!important}.done .sy{text-decoration:none!important;opacity:1}</style></head><body>
 <header><button class="gear" id="gear" onclick="settingsSheet()" aria-label="Settings">⚙︎</button><div><h1 id="ttl">Tempo</h1><div class="sub" id="sub"></div></div><div class="right"><div class="sync" id="sum"></div><div class="sync" id="syn" style="justify-content:flex-end"></div></div></header>
 <div class="navrow" id="navrow"></div>
 <main id="main"></main>
@@ -305,7 +305,7 @@ function eventToGoogle(e){
   const g={summary:e.t,location:e.loc||'',description:e.desc||''},ed=e.endDay&&e.endDay>e.day?e.endDay:e.day;   /* ed = inclusive last day */
   if(e.allDay){g.start={date:e.day};g.end={date:iso(add(P(ed),1))}}            /* Google all-day end date is exclusive */
   else{const toMidnight=e.e>=24;g.start={dateTime:tzDateTime(e.day,e.s)};g.end={dateTime:tzDateTime(toMidnight?iso(add(P(ed),1)):ed,toMidnight?0:e.e)}}
-  if(e.rec&&e.rec!='none')g.recurrence=['RRULE:FREQ='+e.rec.toUpperCase()];
+  if(!e.rid&&e.rec&&e.rec!='none'){const rr=rruleOf(e.rec,e.allDay);if(rr){g.recurrence=[rr];if(!e.allDay){const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;g.start.timeZone=tz;g.end.timeZone=tz}}}   /* Google requires timeZone on recurring timed events; instances (rid) never resend a rule */
   if(e.rem!==undefined)g.reminders={useDefault:false,overrides:e.rem===null?[]:[{method:'popup',minutes:e.rem}]};   /* undefined = leave Google's default reminders alone */
   return g;
 }
@@ -333,20 +333,19 @@ function taskToGoogle(t){
   if(t.desc&&t.desc.trim())n.push(t.desc.trim());
   n.push('Status: '+PN[t.p]);
   (t.hist||[]).forEach(h=>n.push(h));
-  if(t.due)n.push('⚑ '+t.due);
+  n.push('📆 '+(t.date||'-'));   /* planned date (Tempo); Google's due field now holds the DEADLINE */
   if(t.time!=null&&!t.blk)n.push('⏰ '+t24(t.time));
   if(t.rec&&t.rec!='none')n.push('🔁 '+t.rec);
   if(t.sid)n.push('Series: '+t.sid);if(t.occ)n.push('Occurrence: '+t.occ);if(t.skip&&t.skip.length)n.push('Skip: '+t.skip.join(','));   /* repeat series id, original date of this occurrence, skipped dates */
-  if(t.rem!=null)n.push('🔔 '+t.rem);
   if(t.blk){const ev=events.find(x=>x.id==t.blk);if(ev&&ev.gid)n.push('📅 '+ev.gid)}
-  const g={title:(t.icon?t.icon+' ':'')+t.t,notes:n.join('\n'),status:t.p==2?'completed':'needsAction',due:t.date?t.date+'T00:00:00.000Z':null};   /* icon is written in FRONT of the task name */
+  const g={title:(t.icon?t.icon+' ':'')+t.t,notes:n.join('\n'),status:t.p==2?'completed':'needsAction',due:t.due?t.due+'T00:00:00.000Z':null};   /* Tasks API: date only, time part is ignored; null clears it */   /* icon is written in FRONT of the task name */
   if(t.p<2)g.completed=null;
   return g;
 }
 function taskFromGoogle(g,tag,listId){
   const desc=[],hist=[],meta={};
   (g.notes||'').split(/\r?\n/).forEach(l=>{const x=l.trim();
-    const m=x.match(/^(⏰|🔁|🔔|⚑|📅)\uFE0F?\s*(.*)$/u);
+    const m=x.match(/^(⏰|🔁|🔔|⚑|📅|📆)\uFE0F?\s*(.*)$/u);
     if(m){meta[m[1]]=m[2].trim();return}
     const sm=x.match(/^(Series|Occurrence|Skip):\s*(.*)$/i);if(sm){meta['s_'+sm[1].toLowerCase()]=sm[2].trim();return}
     if(/^Status:/i.test(x)){meta.status=x.replace(/^Status:\s*/i,'');return}
@@ -354,11 +353,12 @@ function taskFromGoogle(g,tag,listId){
     desc.push(l)});                        /* everything else is the user's own note */
   while(desc.length&&!desc[desc.length-1].trim())desc.pop();
   const gd=g.due?g.due.slice(0,10):null,st=meta.status||'To do',p=g.status=='completed'?2:Math.min(1,Math.max(0,PN.findIndex(x=>x.toLowerCase()==st.toLowerCase())));
-  let date=gd,time=null,due=null,rec='none',rem=null,blkGid=null;
+  let date=gd,time=null,due=null,newFmt=!!meta['📆'],rec='none',rem=null,blkGid=null;
   const tm=(meta['⏰']||'').match(/^(\d{1,2}):(\d{2})/);if(tm)time=+tm[1]+tm[2]/60;
   if(meta['🔁'])rec=meta['🔁'];
   if(/^\d+$/.test(meta['🔔']||''))rem=+meta['🔔'];
-  if(/^\d{4}-\d{2}-\d{2}$/.test(meta['⚑']||''))due=meta['⚑'];
+  if(newFmt){const pd=meta['📆'];date=/^\d{4}-\d{2}-\d{2}$/.test(pd)?pd:null;due=gd}   /* new format: Google due = deadline */
+  else if(/^\d{4}-\d{2}-\d{2}$/.test(meta['⚑']||''))due=meta['⚑'];   /* legacy: due = planned date, deadline in notes */
   if(meta['📅'])blkGid=meta['📅'];
   let icon='',title=g.title||'';const ic0=['📞','⚠️'].find(i=>title.startsWith(i+' '));if(ic0){icon=ic0;title=title.slice(ic0.length+1)}
   return{id:id++,gid:g.id,gl:listId,t:title,tag,icon,p,date,time,blk:null,blkGid,rec,rem,due,sid:meta.s_series||null,occ:/^\d{4}-\d{2}-\d{2}$/.test(meta.s_occurrence||'')?meta.s_occurrence:null,skip:(meta.s_skip||'').split(',').filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)),desc:desc.join('\n'),hist};
@@ -406,6 +406,7 @@ async function createCalendarEvent(e){
 }
 async function updateCalendarEvent(e){
   if(!e.gid&&!DRY_RUN)return e;   /* only events that exist in Google can be patched */
+  if(e.rid&&e.rec&&e.rec!='none'){try{await googleRequest('PATCH','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events/'+e.rid,{recurrence:[rruleOf(e.rec,e.allDay)]});e.rec='none';toast('Series rule updated in Google Calendar')}catch(x){syncFail(x)}}   /* new rule for the whole series = patch the master event */
   try{await googleRequest('PATCH','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events/'+(e.gid||'DRY'),eventToGoogle(e))}catch(x){syncFail(x)}
   return e;   /* NOTE: changing the calendar of an existing event needs events.move - not implemented */
 }
@@ -577,25 +578,26 @@ const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const dl=s=>P(s).toLocaleDateString('en',{weekday:'short',day:'numeric',month:'short'});
 let cur=new Date(TODAY),id=100,tt,queued=0;
 let notes=loadSeedNotes();
-let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='all',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='both',view='today',filt='All',sortBy='tag',showDone=false,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
-const col=t=>(S.tagColors&&S.tagColors[t])||L[t]||'#6B7587',CAL_ADJ={'#8e24aa':'#9A1FA6','#b39ddb':'#9F8CF2'},ec=e=>{const c=CAL[e.cal]||'#4285F4';return CAL_ADJ[c.toLowerCase()]||c};
+let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='all',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='events',view='today',filt='All',sortBy='tag',showDone=false,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
+const col=t=>(S.tagColors&&S.tagColors[t])||L[t]||'#6B7587',CAL_ADJ={'#8e24aa':'#9A1FA6','#b39ddb':'#9F8CF2'},ec=e=>{if(e.hol)return '#9AA3B2';const c=CAL[e.cal]||'#4285F4';return CAL_ADJ[c.toLowerCase()]||c};
 const nTags=()=>[...new Set(['General',...notes.map(n=>n.tag)])].sort();
 const fmt=h=>{const H=Math.floor(h),m=Math.round((h-H)*60);return H+':'+String(m).padStart(2,'0')};
 const t24=h=>fmt(h).padStart(5,'0'),hh=x=>{const[a,b]=x.split(':');return +a+b/60};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const hrs=a=>a.filter(e=>!e.allDay).reduce((s,e)=>s+e.e-e.s,0);
-function evOn(d){const k=iso(d);return events.filter(e=>{if(calOff.has(e.cal))return false;const b=P(e.day);if(d<b)return false;if(e.until&&k>e.until)return false;if(e.ex&&e.ex.includes(k))return false;if(e.day==k)return true;if(e.endDay&&e.endDay>e.day&&(!e.rec||e.rec=='none'))return k<=e.endDay;const df=Math.round((d-b)/864e5);return e.rec=='daily'||(e.rec=='weekly'&&df%7==0)||(e.rec=='monthly'&&d.getDate()==b.getDate())}).sort((a,b)=>a.s-b.s)}
+function evOn(d){return [...evOn0(d),...holOn(d)]}
+function evOn0(d){const k=iso(d);return events.filter(e=>{if(calOff.has(e.cal))return false;const b=P(e.day);if(d<b)return false;if(e.until&&k>e.until)return false;if(e.ex&&e.ex.includes(k))return false;if(e.day==k)return true;if(e.endDay&&e.endDay>e.day&&(!e.rec||e.rec=='none'))return k<=e.endDay;const df=Math.round((d-b)/864e5);return recOn(e,d,k,b)}).sort((a,b)=>a.s-b.s)}
 const isMulti=e=>!!(e.endDay&&e.endDay>e.day&&(!e.rec||e.rec=='none'));
 const evSpan=(e,k)=>{if(!isMulti(e))return e;const n=Math.round((P(e.endDay)-P(e.day))/864e5)+1,i=Math.round((P(k)-P(e.day))/864e5)+1;return{...e,_i:i,_n:n,s:e.allDay?e.s:(i==1?e.s:0),e:e.allDay?e.e:(i==n?e.e:24)}};   /* the part of a multi-day event that falls on day k */
 const dayTag=e=>e._n?` <span class="dayn">Dag ${e._i} af ${e._n}</span>`:'';
-const tkOn=d=>tasks.filter(t=>t.date==iso(d)&&(!t.blk||calOff.has((events.find(x=>x.id==t.blk)||{}).cal)));
+const tkOn=d=>tasks.filter(t=>tagVis(t)&&t.date==iso(d)&&(!t.blk||calOff.has((events.find(x=>x.id==t.blk)||{}).cal)));
 function toast(m,u){const t=$('#toast');t.innerHTML=esc(m)+(u?' <button style="text-decoration:underline;font-weight:600;margin-left:8px" onclick="UN()">Undo</button>':'');window.UN=()=>{u();t.classList.remove('on')};t.style.pointerEvents=u?'auto':'none';t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),u?5000:2200)}
 function updSyn(){$('#syn').innerHTML=!navigator.onLine?'<i style="background:#E5484D"></i>Offline · '+queued+' queued':DRY_RUN?'<i style="background:#E8A317"></i>Dry run: nothing is sent':USE_DUMMY_DATA?'<i></i>Demo data':'<i></i>Synced'}
 function synced(m,u){if(!navigator.onLine){queued++;updSyn();toast('Offline: saved, '+queued+' waiting to sync',u)}else toast(DRY_RUN?m+' (dry run)':m,u)}
 addEventListener('offline',updSyn);addEventListener('online',()=>{queued=0;updSyn();toast('Back online: all changes synced')});
 function nav(){const n=[['today','◔','Day'],['week','▦','Week'],['month','▤','Month'],['tasks','✓','Tasks'],['notes','✎','Notes']];
 $('#nav').innerHTML=n.map(([k,i,l])=>`<button class="${view==k?'on':''}" onclick="go('${k}')"><span>${i}</span>${l}</button>`).join('')}
-function go(v){taskMode=false;noteMode=false;calOpen=false;if(pickMode)return toast('Confirm or cancel your selection first');view=v;render()}
+function go(v){taskMode=false;noteMode=false;calOpen=false;tkOpen=false;if(pickMode)return toast('Confirm or cancel your selection first');view=v;render()}
 function shift(n){if(view=='today')cur=add(cur,n);else if(view=='week')cur=add(cur,7*n);else cur=new Date(cur.getFullYear(),cur.getMonth()+n,1);render()}
 function render(){persist();nav();updSyn();const cal=['today','week','month'].includes(view);let t,s='';
 if(view=='today'){t=iso(cur)==iso(TODAY)?'Today':cur.toLocaleDateString('en',{weekday:'long'});s=cur.toLocaleDateString('en',{day:'numeric',month:'long',year:'numeric'})}
@@ -603,9 +605,9 @@ else if(view=='week'){const a=wk(cur),b=add(a,6);t='Week '+wn(cur);s=a.getDate()
 else if(view=='month')t=cur.toLocaleString('en',{month:'long',year:'numeric'});
 else t=view=='tasks'?'Tasks':'Notes';
 $('#ttl').textContent=t;$('#sub').textContent=s;$('#ttl').onclick=cal?dateSheet:null;$('#sum').innerHTML=sumHtml();$('#fab').style.display=pickMode?'none':'';$('#gear').style.display=view=='today'?'':'none';
-$('#navrow').innerHTML=cal?`<button class="nb" onclick="shift(-1)" aria-label="Previous">‹</button><button class="chip" onclick="cur=new Date(TODAY);render()">Today</button><button class="nb" onclick="shift(1)" aria-label="Next">›</button>${view=='today'||view=='week'||view=='month'?calMenuHtml():''}`:'';
+$('#navrow').innerHTML=cal?`<button class="nb" onclick="shift(-1)" aria-label="Previous">‹</button><button class="chip" onclick="cur=new Date(TODAY);render()">Today</button><button class="nb" onclick="shift(1)" aria-label="Next">›</button>${view=='today'||view=='week'||view=='month'?tkMenuHtml()+calMenuHtml():''}`:'';
 $('#main').innerHTML=({today:vDay,week:vWeek,month:vMonth,tasks:vTasks,notes:vNotes})[view]()}
-function vDay(){const k=iso(cur),HS=S.start,HE=S.end,PX=54,allEv=evOn(cur),ev=allEv.filter(e=>!calHide.has(e.cal)&&!e.allDay).map(e=>evSpan(e,k)),ad=allEv.filter(e=>!calHide.has(e.cal)&&e.allDay).map(e=>evSpan(e,k)),dls=tasks.filter(t=>t.due==k&&t.p<2),extra=allEv.filter(e=>calHide.has(e.cal)&&e.day==k).flatMap(e=>blkT(e).map(({t,s})=>({...t,time:s}))),tk=tkOn(cur),vo=futureOcc().filter(o=>o.date==k),any=tk.filter(t=>t.time==null),tm=[...tk.filter(t=>t.time!=null),...extra].sort((a,b)=>a.time-b.time);let h='';
+function vDay(){const k=iso(cur),HS=S.start,HE=S.end,PX=54,allEv=evOn(cur),ev=allEv.filter(e=>!calHide.has(e.cal)&&!e.allDay).map(e=>evSpan(e,k)),ad=allEv.filter(e=>!calHide.has(e.cal)&&e.allDay).map(e=>evSpan(e,k)),dls=tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2),extra=allEv.filter(e=>calHide.has(e.cal)&&e.day==k).flatMap(e=>blkT(e).map(({t,s})=>({...t,time:s}))),tk=tkOn(cur),vo=futureOcc(1).filter(o=>o.date==k),any=tk.filter(t=>t.time==null),tm=[...tk.filter(t=>t.time!=null),...extra].sort((a,b)=>a.time-b.time);let h='';
 for(let i=HS;i<HE;i++)h+=`<div class="hr"><small>${i}:00</small></div>`;
 const vis=ev.filter(e=>e.e>HS&&e.s<HE),lay=new Map(),groups=[];let gp=[],ge=-1;
 vis.forEach(e=>{if(gp.length&&(e.s-gp[gp.length-1].s>=0.45||e.s>=ge)){groups.push(gp);gp=[];ge=-1}gp.push(e);ge=Math.max(ge,Math.max(e.e,e.s+MIN_EV_PX/54))});if(gp.length)groups.push(gp);
@@ -619,7 +621,7 @@ const now=k==iso(TODAY)&&nowH>=HS&&nowH<=HE?`<div class="now" style="top:${Math.
 const pend=tasks.filter(t=>t.date&&t.date<iso(TODAY)&&t.p<2).sort((a,b)=>a.date.localeCompare(b.date)).map(taskRow).join('');
 return `<div class="pad">${(ad.length||dls.length||any.length||vo.length)?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${h}${evs}${tms}${now}</div>
 <b>Pending tasks</b> <span class="sub">planned earlier, not completed</span><div style="margin-top:8px">${pend||'<div class="empty">All caught up.</div>'}</div></div>`}
-function vWeek(){let h='';const a=wk(cur),M=wkMode,fo=futureOcc();
+function vWeek(){let h='';const a=wk(cur),M=wkMode,fo=futureOcc(1);
 for(let i=0;i<7;i++){const d=add(a,i),k=iso(d),it=[];
 evOn(d).forEach(e0=>{const e=evSpan(e0,k),hid=calHide.has(e.cal),bt=e.day==k?blkT(e):[],pill=`<button class="pill" style="--c:${ec(e)}" onclick="detail('event',${e.id},'${k}')"><b>${e.allDay?'All day':fmt(e.s)}</b> ${esc(e.t)}${dayTag(e)}</button>`;
 if(hid){if(M!='events')bt.forEach(({t,s})=>it.push({t:s+.001,h:tpill(t,s,false)}))}
@@ -628,7 +630,7 @@ it.push({t:e.allDay?-1:e.s,h:`<div class="evbox" style="--c:${ec(e)}"><button cl
 else if(M=='events')it.push({t:e.allDay?-1:e.s,h:pill});
 else bt.forEach(({t,s})=>it.push({t:s+.001,h:tpill(t,s,false)}))});
 if(M!='events')tkOn(d).forEach(t=>it.push({t:t.time??25,h:tpill(t,t.time,false)}));
-if(M!='events')tasks.filter(t=>t.due==k&&t.p<2).forEach(t=>it.push({t:-2,h:`<button class="pill dlp" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`}));
+if(M!='events')tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2).forEach(t=>it.push({t:-2,h:`<button class="pill dlp" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`}));
 if(M!='events')fo.filter(o=>o.date==k).forEach(o=>it.push({t:o.time??25,h:vpill(o,'pill t')}));
 it.sort((x,y)=>x.t-y.t);
 h+=`<div class="dayrow"><div class="dn ${k==iso(TODAY)?'today':''}" onclick="cur=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});go('today')"><small class="sub">${d.toLocaleDateString('en',{weekday:'short'})}</small><b>${d.getDate()}</b></div><div style="flex:1;min-width:0">${it.map(x=>x.h).join('')||'<span class="sub">Free</span>'}</div></div>`}
@@ -638,24 +640,27 @@ function parseQ(q){q=q.toLowerCase();let days=[];NAMES.forEach((n,i)=>{if(new Re
 if(/weekend/.test(q))days.push(0,6);if(/weekday/.test(q))days.push(1,2,3,4,5);
 let win=[6,24];if(/evening|night/.test(q))win=[17,24];else if(/morning/.test(q))win=[6,12];else if(/afternoon/.test(q))win=[12,17];
 return{days:days.length?days:[0,1,2,3,4,5,6],win,busy:/busy|booked|full/.test(q)}}
-function match(d,f){if(d<TODAY||!f.days.includes(d.getDay()))return false;
+function match(d,f){if(d<TODAY||!f.days.includes(d.getDay()))return false;const k0=iso(d);if((f.from&&k0<f.from)||(f.to&&k0>f.to))return false;
 const o=evOn(d).map(e=>evSpan(e,iso(d))).filter(e=>!findOff.has(e.cal)&&!e.allDay&&e.s<f.win[1]&&e.e>f.win[0]);
 return f.busy?o.reduce((s,e)=>s+Math.min(e.e,f.win[1])-Math.max(e.s,f.win[0]),0)>=3:!o.length}
 function vMonth(){const y=cur.getFullYear(),m=cur.getMonth(),n=new Date(y,m+1,0).getDate(),lead=(new Date(y,m,1).getDay()+6)%7,em=monMode=='events',slot={},rowLn={};
 if(em){const lanes={};events.filter(e=>isMulti(e)&&!calOff.has(e.cal)&&!calHide.has(e.cal)).sort((a,b)=>a.day.localeCompare(b.day)||b.endDay.localeCompare(a.endDay)||a.id-b.id).forEach(e=>{for(let r=0;r<6;r++){const cs=[];for(let c=0;c<7;c++){const d=r*7+c-lead+1;if(d>=1&&d<=n){const k=iso(new Date(y,m,d));if(k>=e.day&&k<=e.endDay)cs.push([c,k])}}
 if(!cs.length)continue;const Ls=lanes[r]=lanes[r]||[];let li=Ls.findIndex(x=>x<cs[0][0]);if(li<0)li=Ls.length;Ls[li]=cs[cs.length-1][0];
 cs.forEach(([c,k],i)=>{(slot[k]=slot[k]||[])[li]={e,first:i==0,len:cs.length,cl:i>0,cr:i<cs.length-1,st:k==e.day,en:k==e.endDay}});rowLn[r]=Ls.length}})}
-const fo={};if(monMode=='tasks')futureOcc().forEach(o=>fo[o.date]=(fo[o.date]||0)+1);   /* projected repeats per day, for Task load */
+const fo={};futureOcc(1).forEach(o=>fo[o.date]=(fo[o.date]||0)+1);   /* projected repeats per day, for Task load */
 let c='',cnt=0;for(let i=0;i<lead;i++)c+='<div></div>';
-for(let d=1;d<=n;d++){const dt=new Date(y,m,d),k0=iso(dt),h=hrs(evVis(dt)),a=allOn(dt),hit=filtObj&&match(dt,filtObj),vn=fo[k0]||0,sh=monMode=='hours'?h*9:(a.length+vn)*12;if(hit)cnt++;
-const evm=monMode=='events',ln=evm?(rowLn[Math.floor((lead+d-1)/7)]||0):0,el=evVis(dt).filter(e=>!(evm&&isMulti(e))),room=Math.max(1,4-ln),cap=el.length>room?Math.max(1,room-1):room,bars=evm?barsHtml(slot[k0],ln,k0):'',dd=tasks.filter(t=>t.due==iso(dt)&&t.p<2).length;
-c+=`<button class="cell ${evm?'evm':''} ${hit?'hl':''} ${iso(dt)==iso(TODAY)?'today':''}" ${evm?(ln>2?`style="height:${98+(ln-2)*14}px"`:''):`style="background:color-mix(in srgb,#2F6FED ${Math.min(50,sh)}%,var(--card))"`} onclick="cur=new Date(${y},${m},${d});go('today')">${dd?`<i class="ddl">${'!'.repeat(dd)}</i>`:''}<b>${d}</b>${evm?bars+el.slice(0,cap).map(e=>`<span class="mev" style="--c:${ec(e)}">${esc(e.t)}</span>`).join('')+(el.length>cap?`<span class="more">+${el.length-cap} more</span>`:''):`<span class="sub">${h?h.toFixed(1)+' h':'&nbsp;'}</span><span class="sub">${a.length||vn?(a.length?a.filter(t=>t.p==2).length+'/'+a.length:'')+(vn?' \u21BB'+vn:''):''}</span>`}</button>`}
+for(let d=1;d<=n;d++){const dt=new Date(y,m,d),k0=iso(dt),h=hrs(evVis(dt)),a=allOn(dt).filter(tagVis),hit=filtObj&&match(dt,filtObj),vn=fo[k0]||0,sh=monMode=='hours'?h*9:(a.length+vn)*12;if(hit)cnt++;
+const evm=monMode=='events',ln=evm?(rowLn[Math.floor((lead+d-1)/7)]||0):0,el=evVis(dt).filter(e=>!(evm&&isMulti(e))),room=Math.max(1,4-ln),cap=el.length>room?Math.max(1,room-1):room,bars=evm?barsHtml(slot[k0],ln,k0):'',dd=tasks.filter(t=>tagVis(t)&&t.due==iso(dt)&&t.p<2).length;
+c+=`<button class="cell ${evm?'evm':''} ${hit?'hl':''} ${iso(dt)==iso(TODAY)?'today':''}" ${evm?(ln>2?`style="height:${98+(ln-2)*14}px"`:''):`style="background:color-mix(in srgb,#2F6FED ${Math.min(50,sh)}%,var(--card))"`} onclick="cur=new Date(${y},${m},${d});go('today')">${dd?`<i class="ddl">${'!'.repeat(dd)}</i>`:''}<b>${d}</b>${evm?bars+el.slice(0,cap).map(e=>`<span class="mev" style="--c:${ec(e)}">${esc(e.t)}</span>`).join('')+(el.length>cap?`<span class="more">+${el.length-cap} more</span>`:'')+(vn?`<span class="more">\u21BB ${vn}</span>`:''):`<span class="sub">${h?h.toFixed(1)+' h':'&nbsp;'}</span><span class="sub">${a.length||vn?(a.length?a.filter(t=>t.p==2).length+'/'+a.length:'')+(vn?' \u21BB'+vn:''):''}</span>`}</button>`}
 return `<div class="chips"><button class="chip" onclick="findSheet()">Find time</button><button class="chip ${monMode=='hours'?'on':''}" onclick="monMode='hours';render()">Hours booked</button><button class="chip ${monMode=='tasks'?'on':''}" onclick="monMode='tasks';render()">Task load</button><button class="chip ${monMode=='events'?'on':''}" onclick="monMode='events';render()">Events</button>${filtQ?`<button class="chip" onclick="applyPreset(-1)">${esc(filtQ)} · ${cnt} days ✕</button>`:''}</div>
 <div class="grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<div class="gh">${x}</div>`).join('')}${c}</div>`}
-const PRE=[{n:'Free workdays',d:'Mon–Fri',days:[1,2,3,4,5],win:[0,24]},{n:'Free work hours',d:'Mon–Fri',days:[1,2,3,4,5],win:[8,17]},{n:'Free weekend evenings',d:'Fri–Sun',days:[5,6,0],win:[18,23]},{n:'Free weekday dinners',d:'Mon–Fri',days:[1,2,3,4,5],win:[17,20]}];
-function findSheet(){const dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-sheet(`<h2>Find time</h2><div class="sub" style="margin-bottom:10px">Highlights days where the calendars chosen in Settings are free.</div>${PRE.map((p,i)=>`<button class="chip" style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:14px" onclick="applyPreset(${i})"><b>${p.n}</b><div class="sub">${p.d} · ${fmt(p.win[0])}–${fmt(p.win[1])}</div></button>`).join('')}${filtObj?'<button class="chip" onclick="applyPreset(-1)">Clear highlight</button>':''}`)}
-function dateSheet(){sheet(`<h2>Go to date</h2><input id="gd" type="date" value="${iso(cur)}"><button class="btn" onclick="if($('#gd').value)cur=P($('#gd').value);close_();render()">Show</button>`)}
+const PRE=[{n:'Free work hours',d:'Mon–Fri',days:[1,2,3,4,5],win:[8,17]},{n:'Free weekend evenings',d:'Fri–Sun',days:[5,6,0],win:[18,23]},{n:'Free weekday dinners',d:'Mon–Fri',days:[1,2,3,4,5],win:[17,20]}];
+function dateSheet(){
+  if(view=='week'){const y=cur.getFullYear();return sheet(`<h2>Go to week</h2><div class="row"><input id="gw" type="number" min="1" max="53" value="${wn(cur)}" style="width:90px"><input id="gy" type="number" min="1970" max="2100" value="${y}" style="width:110px"></div><button class="btn" onclick="goWeek()">Show</button>`)}
+  if(view=='month'){const M=['January','February','March','April','May','June','July','August','September','October','November','December'];return sheet(`<h2>Go to month</h2><div class="row"><select id="gm">${M.map((m,i)=>`<option value="${i}" ${i==cur.getMonth()?'selected':''}>${m}</option>`).join('')}</select><input id="gy" type="number" min="1970" max="2100" value="${cur.getFullYear()}" style="width:110px"></div><button class="btn" onclick="cur=new Date(+$('#gy').value||cur.getFullYear(),+$('#gm').value,1);close_();render()">Show</button>`)}
+  dateSheet0()}
+function goWeek(){const y=+$('#gy').value||cur.getFullYear(),w=Math.min(53,Math.max(1,+$('#gw').value||1));cur=add(wk(new Date(y,0,4)),7*(w-1));close_();render()}   /* ISO week: week 1 contains 4 Jan */
+function dateSheet0(){sheet(`<h2>Go to date</h2><input id="gd" type="date" value="${iso(cur)}"><button class="btn" onclick="if($('#gd').value)cur=P($('#gd').value);close_();render()">Show</button>`)}
 function taskRow(t){const pe=t.date&&t.date<iso(TODAY)&&t.p<2,tv=view=='tasks',sel=tv&&taskSelIds.has(t.id);
 const lead=tv&&taskMode?`<span class="st" style="--c:${col(t.tag)}">${sel?'☑':'☐'}</span>`:`<button class="st" style="--c:${col(t.tag)}" onclick="event.stopPropagation();setP(${t.id},(${t.p}+1)%3)" aria-label="Change status">${SY[t.p]}</button>`;
 const ev=tv?`onpointerdown="tpDown(${t.id})" onpointerup="tpUp()" onpointerleave="tpUp()" onpointercancel="tpUp()" oncontextmenu="return false" onclick="taskClick(${t.id})"`:`onclick="detail('task',${t.id})"`;
@@ -667,7 +672,7 @@ const spawnLock=new Set(),newSid=()=>'r'+Date.now().toString(36)+Math.random().t
 function nextOcc(t){let d=t.occ,n=0;const sk=t.skip||[],td=iso(TODAY);do{d=nextDate(d,t.rec)}while(++n<800&&(sk.includes(d)||d<td));return d}   /* never in the past, never on a skipped date */
 function skipTo(t){const nd=nextOcc(t);t.date=nd;t.occ=nd;t.p=0;t.blk=null}
 function spawnNext(t){
-  const nd=nextOcc(t),key=t.sid+'@'+nd;
+  const nd=nextOcc(t),key=t.sid+'@'+nd;if(nd>='9999')return null;   /* series ended */
   if(spawnLock.has(key)||tasks.some(x=>x!==t&&x.sid==t.sid&&x.occ==nd))return null;   /* same series + same occurrence date already exists: no duplicate */
   spawnLock.add(key);
   const off=t.due&&t.date?Math.round((P(t.due)-P(t.date))/864e5):null,td=iso(TODAY),
@@ -681,8 +686,8 @@ if(nx)synced('Done. Next repeat created for '+dl(nx.date),undo);else synced('Syn
 updateTask(t);render();if(isOpen()&&D.kind)sheet(detHtml())}
 /* Projected (not yet created) occurrences, computed from the repeat rule. They are NEVER written to Google Tasks. */
 function openSeries(){const g={};tasks.filter(t=>t.p<2&&t.rec&&t.rec!='none'&&t.occ).forEach(t=>{const c=g[t.sid];if(!c||t.occ>c.occ)g[t.sid]=t});return Object.values(g)}
-function futureOcc(){const a=S.ahead|0;if(!a)return[];const lim=iso(add(TODAY,a)),td=iso(TODAY),out=[];
-  openSeries().forEach(t=>{let d=t.occ,n=0;const sk=t.skip||[];
+function futureOcc(cv){const a=90;   /* virtual occurrences: 3 months, never past the end date; never written to Google */const lim=iso(add(TODAY,a)),td=iso(TODAY),out=[];
+  openSeries().forEach(t=>{if(cv&&tkHide.has(t.tag))return;let d=t.occ,n=0;const sk=t.skip||[];
     while(n++<400){d=nextDate(d,t.rec);if(d>lim)break;if(d<td||sk.includes(d))continue;
       if(tasks.some(x=>x.sid==t.sid&&x.occ==d))continue;
       out.push({v:1,base:t,t:t.t,tag:t.tag,icon:t.icon,time:t.time,date:d,rec:t.rec,rem:t.rem})}});
@@ -699,17 +704,18 @@ function endDayChg(){const a=$('#fd'),b=$('#fed');if(a&&b&&a.value&&b.value&&b.v
 function vTasks(){const pm=pickMode,td=iso(TODAY),lim=planRange=='week'?iso(add(TODAY,6)):planRange=='month'?iso(add(TODAY,29)):null,
 base=tasks.filter(t=>(filt=='All'||t.tag==filt)&&(!lim||(t.date&&t.date<=lim&&(t.p<2||t.date>=td)))),op=base.filter(t=>t.p<2);
 const srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=='status'?x.p-y.p:sortBy=='date'?(x.date||'9999').localeCompare(y.date||'9999')||(x.time??25)-(y.time??25):x.t.localeCompare(y.t));
-const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',op.filter(t=>t.date&&t.date>=td)],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',op.filter(t=>!t.date&&t.tag=='Uncategorized')]];
+const vo=(!pm&&!taskMode)?futureOcc().filter(o=>(filt=='All'||o.tag==filt)&&(!lim||o.date<=lim)).map(o=>({...o,p:0})):[];
+const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',op.filter(t=>!t.date&&t.tag=='Uncategorized')]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
-const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${srt(a).map(pm?pickRow:taskRow).join('')}`).join('');
-const vl=(!pm&&!taskMode&&S.ahead)?futureOcc().filter(o=>filt=='All'||o.tag==filt):[],vlist=vl.length?`<div class="sechd">Projected repeats <span class="sub">${vl.length}</span></div>${vl.map(vrow).join('')}`:'';
+const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
+const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${body(n,a)}`).join('');
 const bar=pm?`<div class="pickbar"><span>Select tasks (${pickSel.size})</span><span><button class="chip" onclick="cancelPick()">Cancel</button> <button class="chip" style="font-weight:700" onclick="confirmPick()">Confirm</button></span></div>`
 :taskMode?`<div class="pickbar"><span>${taskSelIds.size} selected</span><span><button class="chip" onclick="taskMode=false;render()">Cancel</button> <button class="chip" onclick="moveSel('${iso(TODAY)}')">Today</button> <button class="chip" onclick="taskDateSheet()">Date…</button></span></div>`:'';
 return bar+`<div class="chips">${['All',...Object.keys(L)].map(k=>`<button class="chip ${filt==k?'on':''}" onclick="filt='${k}';render()">${k!='All'?`<span class="dot" style="background:${col(k)}"></span>`:''}${tl(k)}</button>`).join('')}</div>
-<div class="pad"><div class="row" style="margin-bottom:2px"><span class="sub">Sort</span><select class="sortsel" onchange="sortBy=this.value;render()">${[['tag','Tag'],['date','Date'],['status','Status'],['name','Name']].map(([k,l])=>`<option value="${k}" ${sortBy==k?'selected':''}>${l}</option>`).join('')}</select>
+<div class="pad"><div class="row" style="margin-bottom:2px"><span class="sub">Sort</span><select class="sortsel" onchange="sortBy=S.sortBy=this.value;render()">${[['tag','Tag'],['date','Date'],['status','Status'],['name','Name']].map(([k,l])=>`<option value="${k}" ${sortBy==k?'selected':''}>${l}</option>`).join('')}</select>
 <select class="sortsel" onchange="planRange=this.value;render()">${[['all','All'],['week','One Week'],['month','One Month']].map(([k,l])=>`<option value="${k}" ${planRange==k?'selected':''}>${l}</option>`).join('')}</select>
-<select class="sortsel" title="Show upcoming repeats" onchange="S.ahead=+this.value;render()">${[[0,'Repeats: off'],[7,'Repeats +7 d'],[30,'Repeats +30 d'],[90,'Repeats +90 d']].map(([k,l])=>`<option value="${k}" ${(S.ahead|0)==k?'selected':''}>${l}</option>`).join('')}</select>${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button>`}</div>
-${list||(vlist?'':'<div class="empty">No tasks here yet. Tap + to add one.</div>')}${vlist}</div>`}
+${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button>`}</div>
+${list||'<div class="empty">No tasks here yet. Tap + to add one.</div>'}</div>`}
 function vNotes(){const vis=n=>showHold||!n.hold,tg=nTags().filter(t=>(!nSel.size||nSel.has(t))&&notes.some(n=>n.tag==t&&vis(n)));
 const row=(n,dp,L)=>`<div class="note ${n.hold?'held':''} ${noteSelIds.has(n.id)?'sel':''} ${noteDragOn?'dragmode':''}" data-nid="${n.id}" style="margin-left:${Math.min(dp,4)*18}px" onpointerdown="npDown(${n.id})" onpointerup="npUp()" onpointerleave="npUp()" onpointercancel="npUp()" oncontextmenu="return false" onclick="noteClick(${n.id})"><span class="bl">${noteMode?(noteSelIds.has(n.id)?'☑':'☐'):(dp?'◦':'•')}</span><span>${esc(n.t)}</span>${n.hold?`<span class="hi" title="On hold">${pauseIcon(14)}</span>`:''}</div>`+L.filter(c=>c.parent==n.id).sort((a,b)=>b.ts-a.ts).map(c=>row(c,dp+1,L)).join('');
 const sec=tg.map(t=>{const L=notes.filter(n=>n.tag==t&&vis(n)),ids=new Set(L.map(n=>n.id)),roots=L.filter(n=>!n.parent||!ids.has(n.parent)).sort((a,b)=>b.ts-a.ts);
@@ -721,7 +727,7 @@ sheet(`<div class="sub">${esc(n.tag)}${n.hold||tagHold.has(n.tag)?' · on hold':
 <div class="opts"><button class="opt" onclick="close_();openForm('task',null,notes.find(x=>x.id==${i}).t,null,${i})">✓<span>Task</span></button><button class="opt" onclick="close_();openForm('event',null,notes.find(x=>x.id==${i}).t,null,${i})">▦<span>Event</span></button><button class="opt" onclick="holdNote(${i})">${n.hold?playIcon(26):pauseIcon(26)}<span>${n.hold?'Resume':'On hold'}</span></button><button class="opt" style="color:#E5484D" onclick="discard(${i})">✕<span>Discard</span></button></div>`)}
 function discard(i){const k=notes.findIndex(x=>x.id==i),n=notes.splice(k,1)[0];notes.forEach(x=>{if(x.parent==i)x.parent=n.parent||null});close_();render();toast('Note discarded',()=>{notes.splice(k,0,n);render()})}
 function allOn(d){return tasks.filter(t=>t.date==iso(d))}
-function blkT(e){const bt=tasks.filter(t=>t.blk==e.id),len=(e.e-e.s)/Math.max(bt.length,1);return bt.map((t,i)=>({t,s:e.s+i*len}))}
+function blkT(e){const bt=tasks.filter(t=>tagVis(t)&&t.blk==e.id),len=(e.e-e.s)/Math.max(bt.length,1);return bt.map((t,i)=>({t,s:e.s+i*len}))}
 function dayScore(d){const a=S.planStart??S.start,b=S.planEnd??S.end;return b>a?Math.min(100,Math.round(100*blockedHrs(sumEvents(d),a,b)/(b-a))):0}
 function planBar(p){const g=Math.max(1,S.goal),r=p/g,n=Math.round(Math.min(1,r)*5),c=r<.5?'#E5484D':r<1?'#E8A317':'#14A38B',w=r<.5?'Low':r<1?'Good':'Great';
 return `<span style="color:${c}" title="Goal ${g}%">Plan ${p}% ${'▰'.repeat(n)+'▱'.repeat(5-n)} ${w}</span>`}
@@ -735,17 +741,17 @@ return ''}
 function tchip(t){return `<button class="tchip ${t.p==2?'done':''}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}
 function tpill(t,s,ind){return `<button class="pill t ${t.p==2?'done':''}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})">${ind&&t.blk?'↳ ':''}<b class="sy">${SY[t.p]}</b> ${s!=null?fmt(s)+' ':''}${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}
 const WD3=['sun','mon','tue','wed','thu','fri','sat'];
-function parseRule(r){r=(r||'').toLowerCase().trim();let m;
-  if(r=='daily')return{u:'d',n:1};if(r=='weekly')return{u:'w',n:1};if(r=='monthly')return{u:'m',n:1};if(r=='yearly')return{u:'y',n:1};
-  if(m=r.match(/^weekly on ([a-z,\s]+)$/)){const days=m[1].split(/[,\s]+/).filter(Boolean).map(x=>WD3.indexOf(x.slice(0,3))).filter(i=>i>=0);return{u:'w',n:1,days}}
-  if(m=r.match(/^every (\d+) (day|week|month|year)s?$/))return{u:m[2][0],n:Math.max(1,+m[1])};
-  return null}
-function nextDate(s,r){const u=parseRule(r)||{u:'w',n:1},d=P(s);   /* next occurrence after date s for a repeat rule */
+function parseRule(r){r=(r||'').toLowerCase().trim();let un=null,days=null,m=r.match(/\s+until\s+(\d{4}-\d{2}-\d{2})$/);if(m){un=m[1];r=r.slice(0,m.index)}
+  if(m=r.match(/\s+on\s+([a-z,\s]+)$/)){days=m[1].split(/[,\s]+/).filter(Boolean).map(x=>WD3.indexOf(x.slice(0,3))).filter(i=>i>=0);r=r.slice(0,m.index)}
+  const f={daily:'d',weekly:'w',monthly:'m',yearly:'y'};let u,n=1;
+  if(f[r])u=f[r];else if(m=r.match(/^every (\d+) (day|week|month|year)s?$/)){u=m[2][0];n=Math.max(1,+m[1])}else return null;
+  const o={u,n};if(days&&days.length&&u=='w')o.days=days;if(un)o.until=un;return o}
+function nextDate(s,r){const u=parseRule(r)||{u:'w',n:1},d=P(s);   /* next occurrence after s; '9999-12-31' = series has ended */
   if(u.u=='d')d.setDate(d.getDate()+u.n);
-  else if(u.u=='w'){if(u.days&&u.days.length){do{d.setDate(d.getDate()+1)}while(!u.days.includes(d.getDay()))}else d.setDate(d.getDate()+7*u.n)}
+  else if(u.u=='w'){if(u.days){const ix=(d.getDay()+6)%7,sel=[...new Set(u.days.map(x=>(x+6)%7))].sort((a,b)=>a-b),nx=sel.find(x=>x>ix);d.setDate(d.getDate()+(nx!=null?nx-ix:7-ix+7*(u.n-1)+sel[0]))}else d.setDate(d.getDate()+7*u.n)}
   else if(u.u=='m'){const dm=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+u.n);d.setDate(Math.min(dm,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()))}
   else{const dm=d.getDate(),mo=d.getMonth();d.setDate(1);d.setFullYear(d.getFullYear()+u.n);d.setMonth(mo);d.setDate(Math.min(dm,new Date(d.getFullYear(),mo+1,0).getDate()))}
-  return iso(d)}
+  const x=iso(d);return u.until&&x>u.until?'9999-12-31':x}
 function reschedule(i,m){const sn=snapState(),t=tasks.find(x=>x.id==i),n=new Date();
 if(m=='now')planTask(t,iso(TODAY),Math.round((n.getHours()+n.getMinutes()/60)*12)/12);else planTask(t,iso(m=='today'?TODAY:add(TODAY,1)),null);
 synced('Planned '+dl(t.date)+(t.time!=null?' at '+fmt(t.time):''),undoTo(sn));render();if(isOpen()&&D.kind)sheet(detHtml())}
@@ -767,7 +773,8 @@ ${S.sumMode=='selected'?`<div class="calset">${ck(calActive(),c=>S.sumCals.inclu
 <div class="sd">Goal: Plan % that counts as well planned</div><div class="row"><input type="number" min="1" max="100" value="${S.goal}" style="width:90px;margin:0" onchange="setS('goal',Math.max(1,Math.min(100,+this.value||75)))"><span>%</span></div></div>
 <div class="sec"><div class="sh">Find time</div><div class="sd">Calendars checked by Find time</div><div class="calset">${ck(calActive(),c=>!findOff.has(c),'toggleFind')}</div></div>
 <div class="sec"><div class="sh">Appearance</div><div class="row">${['system','light','dark'].map(m=>`<button class="chip ${S.theme==m?'on':''}" onclick="setTheme('${m}')">${m[0].toUpperCase()+m.slice(1)}</button>`).join('')}</div></div>
-<div class="sec"><div class="sh">Reminders</div><div class="sd">Reminders show here while Tempo is open. Events also use Google Calendar's own notifications on your phone.</div><div class="row">${window.Notification?`<button class="chip ${S.notif&&Notification.permission=='granted'?'on':''}" onclick="toggleNotif()">Browser notifications: ${S.notif&&Notification.permission=='granted'?'on':'off'}</button>`:'<span class="sd">Not supported in this browser</span>'}</div></div>
+<div class="sec"><div class="sh">Reminders</div><div class="sd">Event reminders are saved in Google Calendar, which shows and sends them. Tempo sends no notifications of its own.</div></div>
+<div class="sec"><div class="sh">Location search</div><div class="sd">Optional Google Places API key (enable Places API (New) and billing, restrict the key to this site). Without it you can still type locations by hand.</div><input placeholder="API key" value="${esc(S.placesKey||'')}" onchange="S.placesKey=this.value.trim();persist()"></div>
 <div class="sec"><div class="sh">Google account</div><div class="sd">${_token?'Signed in. The login is remembered on this device until the token expires (about 1 hour).':'Not signed in.'}</div><div class="row"><button class="chip" onclick="signOut()">Sign out</button></div></div>
 <div class="sec"><div class="sh">Notes backup</div><div class="sd">Saved as a readable Markdown file. Backup overwrites the same file on Google Drive.</div>
 <div class="row"><button class="chip" onclick="backupNow()">Backup Now</button><button class="chip" onclick="restoreFromDrive()">Restore from Drive</button><button class="chip" onclick="downloadMd()">Download .md file</button></div></div>
@@ -780,13 +787,10 @@ function cancelPick(){pickMode=false;view=pickBack;render();redraw()}
 function togglePick(i){pickSel.has(i)?pickSel.delete(i):pickSel.add(i);render()}
 function pickRow(t){return `<div class="task ${pickSel.has(t.id)?'sel':''}" style="--c:${col(t.tag)}" onclick="togglePick(${t.id})"><span class="st" style="--c:${col(t.tag)}">${pickSel.has(t.id)?'☑':'☐'}</span><div class="t"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${tl(t.tag)} · ${PN[t.p]}${t.date?' · '+dl(t.date):''}</div></div></div>`}
 function places(){return ['City Library, Main St 1','Smile Clinic, Main St 4','Central Station','Café Nord, Harbour Rd 12','Office, Tech Park 3','FitLife Gym, Oak Ave 8','Town Hall','Riverside Park','Grand Hotel, King St 2']}
-function locSug(){const q=$('#fl').value.trim().toLowerCase(),box=$('#lsug');if(!q){box.innerHTML='';return}
-const r=[...new Set([...events.map(e=>e.loc).filter(Boolean),...places()])].filter(p=>p.toLowerCase().includes(q)&&p.toLowerCase()!=q).slice(0,4);
-box.innerHTML=r.map(p=>`<button class="sug" data-v="${esc(p)}" onclick="F.loc=this.dataset.v;$('#fl').value=F.loc;$('#lsug').innerHTML=''">📍 ${esc(p)}</button>`).join('')}
 function ic(s){return s=='⚠️'?'<span class="ex">⚠️</span>':s}
 function evVis(d){return evOn(d).filter(e=>!calHide.has(e.cal))}
 function calMenuHtml(){const act=calActive(),n=act.length,sh=act.filter(c=>!calHide.has(c)).length;
-return `<div class="cdd"><button class="chip ${sh<n?'on':''}" onclick="calOpen=!calOpen;render()">Calendars ${sh}/${n} ▾</button>${calOpen?`<div class="cmenu">${act.map(c=>`<label class="crow"><input type="checkbox" ${calHide.has(c)?'':'checked'} onchange="toggleCal('${c}')"><span class="dot" style="background:${CAL[c]}"></span>${esc(c)}</label>`).join('')}</div>`:''}</div>`}
+return `<div class="cdd"><button class="chip ${sh<n?'on':''}" onclick="calOpen=!calOpen;tkOpen=false;render()">Cal ${sh}/${n} ▾</button>${calOpen?`<div class="cmenu">${act.map(c=>`<label class="crow"><input type="checkbox" ${calHide.has(c)?'':'checked'} onchange="toggleCal('${c}')"><span class="dot" style="background:${CAL[c]}"></span>${esc(c)}</label>`).join('')}<label class="crow"><input type="checkbox" ${S.holidays?'checked':''} onchange="S.holidays=this.checked;render()"><span class="dot" style="background:#9AA3B2"></span>Danish holidays</label></div>`:''}</div>`}
 function toggleCal(c){calHide.has(c)?calHide.delete(c):calHide.add(c);render()}
 function startChg(){const ns=$('#fs').value,fe=$('#fe');if(!ns||!fe.value){F.s=ns;return}
 let dur=hh(fe.value)-hh(F.s||ns);if(!(dur>0))dur=1;F.s=ns;const e=Math.min(hh(ns)+dur,23.98);fe.value=t24(e);F.e=fe.value}
@@ -924,7 +928,7 @@ function remCandidates(){const out=[];   /* today and tomorrow: events and open 
     evOn(d).forEach(e=>{if(e.allDay||e.rem==null)return;out.push({key:'e:'+e.id+':'+k+':'+t24(e.s),title:e.t,start:new Date(k+'T'+t24(e.s)+':00'),rem:e.rem,type:'Event'})});
     tasks.forEach(t=>{if(t.date!=k||t.p>=2||t.rem==null||t.blk)return;const h=t.time!=null?t.time:9;out.push({key:'t:'+t.id+':'+k+':'+t24(h),title:t.t,start:new Date(k+'T'+t24(h)+':00'),rem:t.rem,type:'Task'})})});
   return out}
-function checkReminders(){const now=Date.now();
+function checkReminders(){return;const now=Date.now();
   remCandidates().forEach(c=>{const st=c.start.getTime(),sn=remSnooze[c.key];
     if(sn){if(now<sn)return}
     else{if(remFired.has(c.key))return;if(now<st-c.rem*60000||now>st+10*60000)return}
@@ -945,12 +949,82 @@ function toggleNotif(){
   if(S.notif){S.notif=false;render();settingsSheet();return}
   Notification.requestPermission().then(p=>{S.notif=p=='granted';render();settingsSheet();toast(S.notif?'Browser notifications on':'Permission not granted')});
 }
+function ruleUi(){const u=parseRule(F.rec),FQ=[['none','Does not repeat'],['d','Daily'],['w','Weekly'],['m','Monthly'],['y','Yearly']],un={d:'days',w:'weeks',m:'months',y:'years'};
+  let h=`<select onchange="recSet('u',this.value)">${FQ.map(([v,l])=>`<option value="${v}" ${(u?u.u:'none')==v?'selected':''}>${l}</option>`).join('')}</select>`;
+  if(u){h+=`<div class="row" style="margin-top:6px"><span class="sub">Every</span><input type="number" min="1" max="99" value="${u.n}" style="width:70px" onchange="recSet('n',this.value)"><span class="sub">${un[u.u]}</span></div>`;
+    if(u.u=='w')h+=`<div class="row" style="margin-top:6px">${[1,2,3,4,5,6,0].map(i=>`<button class="chip ${u.days&&u.days.includes(i)?'on':''}" onclick="recDay(${i})">${['S','M','T','W','T','F','S'][i]}</button>`).join('')}</div>`;
+    h+=`<div class="sub">Ends (optional)</div><input type="date" value="${u.until||''}" onchange="recSet('until',this.value)">`}
+  return h}
+function recBuild(u){if(!u)return 'none';const w={d:'day',w:'week',m:'month',y:'year'}[u.u],b=u.n>1?'every '+u.n+' '+w+'s':{d:'daily',w:'weekly',m:'monthly',y:'yearly'}[u.u];return b+(u.days&&u.days.length?' on '+u.days.map(i=>WD3[i][0].toUpperCase()+WD3[i].slice(1)).join(','):'')+(u.until?' until '+u.until:'')}
+function recSet(k,v){snap();let u=parseRule(F.rec);if(k=='u')u=v=='none'?null:{u:v,n:u?u.n:1,until:u&&u.until};else if(k=='n')u.n=Math.max(1,+v||1);else u.until=v||undefined;if(u&&u.u!='w')delete u.days;F.rec=recBuild(u);redraw()}
+function recDay(i){snap();const u=parseRule(F.rec),a=new Set(u.days||[]);a.has(i)?a.delete(i):a.add(i);u.days=[...a];F.rec=recBuild(u);redraw()}
+function rruleOf(rec,allDay){const u=parseRule(rec);if(!u)return null;let r='RRULE:FREQ='+{d:'DAILY',w:'WEEKLY',m:'MONTHLY',y:'YEARLY'}[u.u];if(u.n>1)r+=';INTERVAL='+u.n;if(u.days)r+=';BYDAY='+u.days.map(x=>['SU','MO','TU','WE','TH','FR','SA'][x]).join(',');if(u.until)r+=';UNTIL='+u.until.replace(/-/g,'')+(allDay?'':'T235959Z');return r}
+let tkHide=new Set(),tkOpen=false,locT=null,locCtl=null,findLast=null;
+const tagVis=t=>!tkHide.has(t.tag);
+function recOn(e,d,k,b){const u=parseRule(e.rec);if(!u)return false;if(u.until&&k>u.until)return false;const df=Math.round((d-b)/864e5);
+  if(u.u=='d')return df%u.n==0;
+  if(u.u=='w'){if(u.days){const w=Math.round((wk(d)-wk(b))/(7*864e5));return w>=0&&w%u.n==0&&u.days.includes(d.getDay())}return df%(7*u.n)==0}
+  const mo=(d.getFullYear()-b.getFullYear())*12+d.getMonth()-b.getMonth();
+  if(u.u=='m')return mo%u.n==0&&d.getDate()==b.getDate();
+  return mo%(12*u.n)==0&&d.getMonth()==b.getMonth()&&d.getDate()==b.getDate()}
+/* Danish public holidays: computed from Easter (Gregorian algorithm), so every year is correct; never stored, so no duplicates. Store Bededag was abolished from 2024. */
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);return new Date(y,Math.floor((h+l-7*m+114)/31)-1,(h+l-7*m+114)%31+1)}
+const _hol={};
+function holidays(y){if(_hol[y])return _hol[y];const E=easter(y),o=n=>iso(add(E,n)),l=[[y+'-01-01','Nytårsdag'],[o(-3),'Skærtorsdag'],[o(-2),'Langfredag'],[o(0),'Påskedag'],[o(1),'2. påskedag']];if(y<=2023)l.push([o(26),'Store bededag']);l.push([o(39),'Kristi himmelfartsdag'],[o(49),'Pinsedag'],[o(50),'2. pinsedag'],[y+'-12-25','Juledag'],[y+'-12-26','2. juledag']);return _hol[y]=l.map(([k,t],i)=>({id:-(y*100+i+1),t,cal:'Danish holidays',day:k,endDay:k,s:0,e:24,allDay:true,rec:'none',hol:true}))}
+function holOn(d){if(!S.holidays)return[];const k=iso(d);return holidays(d.getFullYear()).filter(h=>h.day==k)}
+function tkMenuHtml(){const tg=Object.keys(L),n=tg.length,sh=tg.filter(t=>!tkHide.has(t)).length;
+  return `<div class="cdd"><button class="chip ${sh<n?'on':''}" onclick="tkOpen=!tkOpen;calOpen=false;render()">Tasks ${sh}/${n} ▾</button>${tkOpen?`<div class="cmenu">${tg.map(t=>`<label class="crow"><input type="checkbox" ${tkHide.has(t)?'':'checked'} onchange="tkHide.has(this.dataset.t)?tkHide.delete(this.dataset.t):tkHide.add(this.dataset.t);render()" data-t="${esc(t)}"><span class="dot" style="background:${col(t)}"></span>${esc(tl(t))}</label>`).join('')}</div>`:''}</div>`}
+function locSug(){const raw=$('#fl').value.trim(),q=raw.toLowerCase(),box=$('#lsug');clearTimeout(locT);if(!q){box.innerHTML='';return}
+  const local=()=>[...new Set([...events.map(e=>e.loc).filter(Boolean),...places()])].filter(p=>p.toLowerCase().includes(q)&&p.toLowerCase()!=q).slice(0,4);
+  const show=(r,hint)=>{box.innerHTML=r.map(p=>`<button class="sug" data-v="${esc(p)}" onclick="F.loc=this.dataset.v;$('#fl').value=F.loc;$('#lsug').innerHTML=''">📍 ${esc(p)}</button>`).join('')+(hint?`<div class="sub" style="padding:4px 8px">${hint}</div>`:'')};
+  show(local());const key=S.placesKey||'';if(!key||!navigator.onLine)return;   /* manual entry always works */
+  locT=setTimeout(async()=>{try{if(locCtl)locCtl.abort();locCtl=new AbortController();F.pst=F.pst||(window.crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now()));
+    const r=await fetch('https://places.googleapis.com/v1/places:autocomplete',{method:'POST',signal:locCtl.signal,headers:{'Content-Type':'application/json','X-Goog-Api-Key':key},body:JSON.stringify({input:raw,sessionToken:F.pst,languageCode:'da'})});
+    if(!r.ok)throw new Error('Places '+r.status);const j=await r.json(),el=$('#fl');
+    if(el&&el.value.trim()==raw)show([...(j.suggestions||[]).map(x=>x.placePrediction&&x.placePrediction.text&&x.placePrediction.text.text).filter(Boolean),...local()].slice(0,6))}
+  catch(e){if(e.name!='AbortError')show(local(),'Place suggestions unavailable – you can type the location manually.')}},250)}
+/* ---- Find time: Danish + English phrases ---- */
+const FD={mandag:1,tirsdag:2,onsdag:3,torsdag:4,fredag:5,'lørdag':6,'søndag':0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0},
+FM={januar:0,jan:0,january:0,februar:1,feb:1,february:1,marts:2,mar:2,march:2,april:3,apr:3,maj:4,may:4,juni:5,jun:5,june:5,juli:6,jul:6,july:6,august:7,aug:7,september:8,sep:8,sept:8,oktober:9,okt:9,oct:9,october:9,november:10,nov:10,december:11,dec:11};
+function parseFind(q){let s=' '+q.toLowerCase().replace(/[,;!?]/g,' ')+' ',notes=[],from=null,to=null,days=null,win=null,len=30,m;const td=TODAY,nx=n=>iso(add(td,n)),W='(?<![a-zæøå])',X='(?![a-zæøå])',cut=r=>{s=s.replace(r,' ')};
+  if(m=s.match(/(?:mellem|between)\s*(?:kl\.?\s*)?(\d{1,2})(?::\d{2})?\s*(?:og|and|-|to)\s*(?:kl\.?\s*)?(\d{1,2})/)){win=[+m[1],+m[2]];cut(m[0])}
+  if(m=s.match(/(?:efter|after)\s*(?:kl\.?\s*)?(\d{1,2})(?::\d{2})?\s*(am|pm)?/)){let h=+m[1];if(m[2]=='pm'&&h<12)h+=12;win=[h,24];cut(m[0])}
+  if(m=s.match(/(?:før|before)\s*(?:kl\.?\s*)?(\d{1,2})(?::\d{2})?\s*(am|pm)?/)){let h=+m[1];if(m[2]=='pm'&&h<12)h+=12;win=[win?win[0]:6,h];cut(m[0])}
+  if(m=s.match(/(\d+(?:[.,]\d+)?)\s*(timer|time|hours?|hrs?|min(?:utter|utes?)?)(?![a-zæøå])/)){const v=+m[1].replace(',','.');len=/^min/.test(m[2])?v:v*60;cut(m[0])}
+  if(new RegExp(W+'(i\\s+overmorgen|day after tomorrow)'+X).test(s)){from=to=nx(2);cut(/i\s+overmorgen|day after tomorrow/)}
+  else if(new RegExp(W+'(i\\s*morgen|tomorrow)'+X).test(s)){from=to=nx(1);cut(/i\s*morgen|tomorrow/)}
+  else if(/(i\s+dag|today)(?![a-zæøå])/.test(s)){from=to=nx(0);cut(/i\s+dag|today/)}
+  else if(/(i\s+aften|tonight)(?![a-zæøå])/.test(s)){from=to=nx(0);if(!win)win=[17,23];cut(/i\s+aften|tonight/)}
+  const mon=add(td,-((td.getDay()+6)%7));
+  if(!from){
+    if(/(næste|naeste|next)\s+(uge|week)/.test(s)){from=iso(add(mon,7));to=iso(add(mon,13));cut(/(næste|naeste|next)\s+(uge|week)/)}
+    else if(/(denne|this)\s+(uge|week)/.test(s)){from=nx(0);to=iso(add(mon,6));cut(/(denne|this)\s+(uge|week)/)}
+    else if(/(næste|naeste|next)\s+(måned|maaned|month)/.test(s)){from=iso(new Date(td.getFullYear(),td.getMonth()+1,1));to=iso(new Date(td.getFullYear(),td.getMonth()+2,0));cut(/(næste|naeste|next)\s+(måned|maaned|month)/)}
+    else if(/(denne|this)\s+(måned|maaned|month)/.test(s)){from=nx(0);to=iso(new Date(td.getFullYear(),td.getMonth()+1,0));cut(/(denne|this)\s+(måned|maaned|month)/)}
+    else if(/weekend/.test(s)){const sat=td.getDay()==0?add(td,-1):add(td,(6-td.getDay())%7);from=iso(td.getDay()==0||td.getDay()==6?td:sat);to=iso(add(sat,1));cut(/i\s+weekenden|this weekend|weekend(en)?/)}
+    else if(m=s.match(/(\d{4})-(\d{2})-(\d{2})/)){from=to=m[0];cut(m[0])}
+    else if(m=s.match(new RegExp('(\\d{1,2})\\.?\\s*(?:of\\s+)?('+Object.keys(FM).join('|')+')'+X))||s.match(new RegExp(W+'('+Object.keys(FM).join('|')+')\\s+(\\d{1,2})(?:st|nd|rd|th)?'+X))){const dayN=+(/^\d/.test(m[1])?m[1]:m[2]),mo=FM[/^\d/.test(m[1])?m[2]:m[1]];let d=new Date(td.getFullYear(),mo,dayN);if(d<td)d=new Date(td.getFullYear()+1,mo,dayN);from=to=iso(d);cut(m[0])}
+    else if(m=s.match(/(?<![\d:])(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?![\d:])/)){let y=m[3]?(+m[3]<100?2000+ +m[3]:+m[3]):td.getFullYear(),d=new Date(y,+m[2]-1,+m[1]);if(!m[3]&&d<td)d=new Date(y+1,+m[2]-1,+m[1]);from=to=iso(d);cut(m[0])}
+    else{const re=new RegExp('(?:(næste|naeste|next)\\s+)?'+W+'('+Object.keys(FD).join('|')+')'+X);if(m=s.match(re)){const wd=FD[m[2]];let d;if(m[1]){d=add(mon,7+(wd+6)%7);notes.push('"next '+m[2]+'" can mean the coming one or the one next week – interpreted as next week\'s.')}else{d=new Date(td);while(d.getDay()!=wd)d=add(d,1)}from=to=iso(d);cut(m[0])}}
+  }
+  if(/(hverdage|weekdays?)(?![a-zæøå])/.test(s)){days=[1,2,3,4,5]}
+  if(!win){if(/(eftermiddag|afternoon)/.test(s))win=[12,17];else if(/formiddag/.test(s))win=[9,12];else if(/(morgen|morning)/.test(s))win=[6,12];else if(/(aften|evening)/.test(s))win=[17,23];else if(/(middag|frokost|lunch)/.test(s))win=[11,14];else if(/(arbejdstid|work(ing)? hours|office hours)/.test(s))win=[8,17]}
+  if(!from){from=nx(0);to=nx(14);notes.push('No date recognised – showing the next 14 days.')}
+  if(!win){win=[7,22];if(!notes.length&&!/\d/.test(q))notes.push('No time of day given – using 07:00–22:00.')}
+  const lab=(from==to?dl(from):dl(from)+' – '+dl(to))+' · '+fmt(win[0])+'–'+fmt(win[1]);
+  return{from,to,days,win,len,notes,label:lab}}
+function freeSlots(f){const out=[],now=new Date(),nh=now.getHours()+now.getMinutes()/60;for(let d=P(f.from),n=0;iso(d)<=f.to&&n<62;d=add(d,1),n++){if(d<TODAY)continue;if(f.days&&!f.days.includes(d.getDay()))continue;const k=iso(d);let a=f.win[0];if(k==iso(TODAY))a=Math.max(a,Math.ceil(nh*4)/4);
+  const iv=evOn(d).map(e=>evSpan(e,k)).filter(e=>!findOff.has(e.cal)&&!e.allDay&&e.s<f.win[1]&&e.e>a).map(e=>[Math.max(e.s,a),Math.min(e.e,f.win[1])]).sort((x,y)=>x[0]-y[0]);let c=a;const sl=[];iv.forEach(([x,y])=>{if(x-c>=f.len/60)sl.push([c,x]);c=Math.max(c,y)});if(f.win[1]-c>=f.len/60)sl.push([c,f.win[1]]);if(sl.length)out.push({k,sl})}return out}
+function findSheet(){sheet(`<h2>Find time</h2><input id="fq" placeholder="e.g. find tid i morgen · find time next Friday afternoon" onkeydown="if(event.key=='Enter')findGo()"><button class="btn" onclick="findGo()">Search</button><div class="sub" style="margin:10px 0">Danish or English. Or pick a ready-made search:</div>${PRE.map((p,i)=>`<button class="chip" style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:14px" onclick="applyPreset(${i})"><b>${p.n}</b><div class="sub">${p.d} · ${fmt(p.win[0])}–${fmt(p.win[1])}</div></button>`).join('')}${filtObj?'<button class="chip" onclick="applyPreset(-1)">Clear highlight</button>':''}`)}
+function findGo(){const q=$('#fq').value.trim();if(!q)return;const f=findLast=parseFind(q),sl=freeSlots(f);
+  sheet(`<h2>Find time</h2><input id="fq" value="${esc(q)}" onkeydown="if(event.key=='Enter')findGo()"><button class="btn" onclick="findGo()">Search again</button><div class="sub" style="margin:10px 0"><b>Understood as:</b> ${esc(f.label)}${f.days?' · weekdays only':''} · at least ${f.len>=60?(f.len/60)+' h':f.len+' min'}${f.notes.map(n=>'<br>⚠️ '+esc(n)).join('')}</div>${sl.length?sl.slice(0,10).map(x=>`<div style="margin-bottom:6px"><b>${dl(x.k)}</b><br><span class="sub">${x.sl.map(([a,b])=>fmt(a)+'–'+fmt(b)).join(' · ')}</span></div>`).join('')+(sl.length>10?`<div class="sub">+${sl.length-10} more days</div>`:''):'<div class="empty">No free time in that period.</div>'}<button class="btn" style="margin-top:10px" onclick="applyFind()">Highlight days in Month</button>`)}
+function applyFind(){const f=findLast;if(!f)return;filtQ=f.label;filtObj={days:f.days||[0,1,2,3,4,5,6],win:f.win,busy:false,from:f.from,to:f.to};cur=P(f.from);close_();view='month';render()}
 function sheet(h){$('#panel').innerHTML='<button class="xbtn" onclick="closeX()" aria-label="Close">✕</button>'+h;$('#sheet').classList.add('open')}
 const isOpen=()=>$('#sheet').classList.contains('open');
 function close_(){if(D.kind=='note'){const ta=$('#nedit'),n=notes.find(x=>x.id==D.id);if(ta&&n&&ta.value.trim()&&ta.value.trim()!=n.t)n.t=ta.value.trim()}
 $('#sheet').classList.remove('open');D={};if(view=='notes')render()}
 $('#sheet').onclick=e=>{if(e.target.id=='sheet')close_()};
-function detail(kind,did,od){if(dragJust)return;curOcc=od||null;D={kind,id:did};sheet(detHtml())}
+function detail(kind,did,od){if(dragJust||did<0)return;curOcc=od||null;D={kind,id:did};sheet(detHtml())}
 function detHtml(){if(D.kind=='event'){const e=events.find(x=>x.id==D.id);if(!e)return'';
 const sl=blkT(e).map(({t,s})=>`<div class="task" style="--c:${col(t.tag)}"><button class="st" style="--c:${col(t.tag)}" onclick="setP(${t.id},(${t.p}+1)%3)">${SY[t.p]}</button><div class="t ${t.p==2?'done':''}"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${fmt(s)} · ${PN[t.p]}</div></div></div>`).join('');
 return `<div class="sub"><span class="dot" style="background:${ec(e)}"></span>${e.cal} calendar</div><h2>${esc(e.t)}</h2><div style="margin-bottom:12px">${dl(e.day)}${isMulti(e)?' – '+dl(e.endDay)+' · '+(Math.round((P(e.endDay)-P(e.day))/864e5)+1)+' days':''} · ${e.allDay?'All day':fmt(e.s)+'–'+fmt(e.e)}${e.rec!='none'?'<br>Repeats '+e.rec:''}${e.loc?'<br>📍 '+esc(e.loc):''}${e.desc?'<div class="sub" style="margin-top:6px;white-space:pre-wrap">'+esc(e.desc)+'</div>':''}</div>
@@ -977,7 +1051,7 @@ function formHtml(){const k=F.kind,ed=!!F.id,ttl={task:'What needs doing?',event
 const chips=(o,cur,fn,c)=>o.map(x=>`<button class="chip ${cur==x?'on':''}" onclick="snap();${fn}='${x}';redraw()"><span class="dot" style="background:${c(x)}"></span>${esc(tl(x))}</button>`).join('');
 const RULES=[['none','Does not repeat'],['daily','Every day'],['weekly','Every week'],['weekly on Mon,Tue,Wed,Thu,Fri','Every weekday'],['every 2 weeks','Every 2 weeks'],['monthly','Every month'],['yearly','Every year']],
  EVR=[['none','Does not repeat'],['daily','Every day'],['weekly','Every week'],['monthly','Every month']],ropts=k=='task'?(RULES.some(r=>r[0]==F.rec)?RULES:[...RULES,[F.rec,F.rec]]):EVR;
-const rep=`<select id="fr">${ropts.map(([v,l])=>`<option value="${v}" ${F.rec==v?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+const rep=ruleUi();
 const REM=[['','Ingen'],['0','Ved start (0 min)'],['5','5 min før'],['15','15 min før'],['30','30 min før'],['60','1 time før'],['1440','1 dag før']];
 let remOpts=k=='event'?[['d','Standard (Google)'],...REM]:REM;if(!remOpts.some(r=>r[0]==String(F.rem)))remOpts=[...remOpts,[String(F.rem),F.rem+' min før']];
 const remSel=`<div class="sub">Påmindelse</div><select id="frem">${remOpts.map(([v,l])=>`<option value="${v}" ${String(F.rem)==v?'selected':''}>${l}</option>`).join('')}</select>`;
@@ -990,7 +1064,7 @@ ${F.allDay?'':`<div class="sub">Tasks in this event</div><div class="tray" style
 else if(k=='task')body=`<div class="row">${[0,1,2].map(i=>`<button class="chip ${F.p==i?'on':''}" onclick="snap();F.p=${i};redraw()">${SY[i]} ${PN[i]}</button>`).join('')}</div>
 <div class="row">${ICONS.map(i=>`<button class="ic ${F.icon==i?'on':''}" onclick="snap();F.icon=F.icon=='${i}'?'':'${i}';redraw()">${ic(i)}</button>`).join('')}</div>
 <div class="sub">Plan for a day (optional)</div><div class="row"><input id="fd" type="date" value="${F.d}" style="flex:1;margin:0"><input id="fs" type="time" value="${F.s}" style="flex:1;margin:0"><button class="chip" onclick="snap();F.d='';F.s='';redraw()">Clear</button></div>${rep}
-${remSel}
+
 <div class="sub">Note</div><textarea id="fdsc" placeholder="Note (optional)" style="min-height:70px">${esc(F.desc)}</textarea>
 <div class="sub">Deadline (optional)</div><input id="fdue" type="date" value="${F.due||''}">
 <div class="sub">Tag (Google Tasks list)</div><div class="row">${chips(Object.keys(L),F.tag,'F.tag',col)}</div><input id="fnt" placeholder="…or a new tag (creates a Google list)" value="${esc(F.nt)}">`;
@@ -1067,10 +1141,10 @@ document.addEventListener('touchend',e=>{
   const order=['today','week','month','tasks','notes'],n=order.indexOf(view)+dir;
   if(n>=0&&n<order.length)go(order[n]);
 },{passive:true});
-loadState();
+loadState();sortBy=S.sortBy||'date';
 render();
 startApp();
-setInterval(checkReminders,30000);checkReminders();
+/* Tempo shows no notifications of its own: Google Calendar delivers event reminders */
 
 /* =====================================================================
    OVERVIEW - Google hooks (all in the DATA LAYER section at the top of the script)
