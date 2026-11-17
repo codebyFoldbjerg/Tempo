@@ -130,7 +130,7 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .st{min-width:36px;min-height:36px;display:grid;place-items:center}.chip{padding:8px 14px}.task{padding-top:8px;padding-bottom:8px}
 .panel{border-radius:28px 28px 0 0;padding-top:28px;position:relative}.panel::before{content:"";position:absolute;top:10px;left:50%;width:42px;height:4px;margin-left:-21px;border-radius:4px;background:var(--line)}
 .cell.today{outline:none;border:2px solid var(--ink)}.cell.today>b{background:var(--ink);color:var(--bg);border-radius:8px;padding:0 6px;align-self:flex-start}
-.sechd{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--mute)}.sechd::after{content:"";flex:1;height:1px;background:var(--line)}
+.sechd{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,var(--card));border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:10px;padding:7px 11px;margin:18px 0 8px}.sechd .sub{font-weight:700;color:var(--mute);margin-left:auto}.task.compact{padding-top:6px;padding-bottom:6px}.task.compact .m{display:none}
 .hr{border-top-color:color-mix(in srgb,var(--line) 55%,transparent)}.now::before{content:"";position:absolute;left:-4px;top:-4px;width:9px;height:9px;border-radius:50%;background:#E5484D}.ev{border-radius:12px}
 .fab{width:54px;height:54px;border-radius:18px;font-size:28px;bottom:calc(86px + env(safe-area-inset-bottom,0px))}body{padding-bottom:116px}
 .pickbar{flex-wrap:wrap;gap:8px}
@@ -274,25 +274,61 @@ async function authFetch(url,opts={}){   /* fetch with the bearer token; on 401 
   }
   throw new Error('auth: still 401 Unauthorized after renewing the token');
 }
-async function googleRequest(method,url,body){
-  if(DRY_RUN&&method!=='GET'){console.log('[DRY_RUN] '+method+' '+url,body||'');return{id:'dry-'+Math.random().toString(36).slice(2,9),dryRun:true}}
-  const res=await authFetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
-  if(!res.ok)throw new Error('Google API '+res.status+' on '+method+' '+url);
-  return res.status===204?null:res.json();
+const _inflight=new Map(),_syncQ=new Map();
+let _syncBusy=0;
+function setSyncing(d){_syncBusy=Math.max(0,_syncBusy+d);updSyn()}
+function enqueueSync(key,fn){
+  const prev=_syncQ.get(key)||Promise.resolve();
+  const next=prev.catch(()=>{}).then(async()=>{setSyncing(1);try{return await fn()}finally{setSyncing(-1)}});
+  _syncQ.set(key,next);
+  next.finally(()=>{if(_syncQ.get(key)===next)_syncQ.delete(key)});
+  return next;
 }
-function syncFail(e){console.error(e);if(/^auth/.test(e.message))return;toast('Sync failed: '+e.message)}   /* sign-in problems show the login button instead of a toast */
+async function googleRequest(method,url,body,attempt=0){
+  if(DRY_RUN&&method!=='GET'){console.log('[DRY_RUN] '+method+' '+url,body||'');return{id:'dry-'+Math.random().toString(36).slice(2,9),dryRun:true}}
+  const cacheKey=method==='GET'?url:null;
+  if(cacheKey&&_inflight.has(cacheKey))return _inflight.get(cacheKey);
+  const run=(async()=>{
+    try{
+      const res=await authFetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+      if((res.status===429||res.status>=500)&&attempt<2){
+        await new Promise(r=>setTimeout(r,300*Math.pow(2,attempt)));
+        return googleRequest(method,url,body,attempt+1);
+      }
+      if(!res.ok){
+        let detail='';try{const errJ=await res.json();detail=errJ&&errJ.error&&errJ.error.message?' ('+errJ.error.message+')':''}catch(_){}
+        throw new Error('Google API '+res.status+detail);
+      }
+      return res.status===204?null:res.json();
+    }catch(err){
+      if(attempt<1&&err&&!/^auth|Google API 4\d\d/.test(err.message)){
+        await new Promise(r=>setTimeout(r,350));
+        return googleRequest(method,url,body,attempt+1);
+      }
+      throw err;
+    }finally{
+      if(cacheKey)_inflight.delete(cacheKey);
+    }
+  })();
+  if(cacheKey)_inflight.set(cacheKey,run);
+  return run;
+}
+function syncFail(e){console.error(e);if(/^auth/.test(e.message))return;toast('Sync failed (local changes kept): '+e.message)}
 
 /* ---- 2. Shared state filled by initData() -------------------------------- */
 let CAL={},L={},calIds={},listIds={},events=[],tasks=[];   /* CAL: name->colour, L: tag->colour, calIds/listIds: name->Google id */
 async function initData(){
+  setSyncing(1);
   try{
-    CAL=await fetchCalendars();
-    L=await fetchTaskLists();
-    events=await fetchCalendarEvents();
-    tasks=await fetchTasks();
-    tasks.forEach(t=>{if(t.blkGid){const ev=events.find(e=>e.gid==t.blkGid);if(ev)t.blk=ev.id;delete t.blkGid}});
+    const [calRes,listRes]=await Promise.all([fetchCalendars(),fetchTaskLists()]);
+    CAL=calRes;L=listRes;
+    const [evRes,tkRes]=await Promise.all([fetchCalendarEvents(),fetchTasks()]);
+    events=evRes;tasks=tkRes;
+    const evByGid=new Map(events.filter(e=>e.gid).map(e=>[e.gid,e]));
+    tasks.forEach(t=>{if(t.blkGid){const ev=evByGid.get(t.blkGid);if(ev)t.blk=ev.id;delete t.blkGid}});
     dataLoaded=true;
   }catch(e){syncFail(e)}
+  finally{setSyncing(-1)}
   render();
 }
 
@@ -381,63 +417,140 @@ async function fetchTaskLists(){
 async function fetchCalendarEvents(){
   if(USE_DUMMY_DATA)return dummyEvents();
   const min=encodeURIComponent(add(TODAY,-31).toISOString()),max=encodeURIComponent(add(TODAY,120).toISOString()),out=[];
-  for(const name of Object.keys(CAL)){
-    /* singleEvents=true expands recurring events into separate instances. TODO: follow nextPageToken if you have >250 events. */
-    const r=await googleRequest('GET','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[name])+'/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin='+min+'&timeMax='+max);
-    (r.items||[]).filter(g=>g.status!='cancelled').forEach(g=>out.push(eventFromGoogle(g,name)));
-  }
+  await Promise.all(Object.keys(CAL).map(async name=>{
+    let pageToken='';
+    do{
+      const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[name])+'/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin='+min+'&timeMax='+max+(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
+      const r=await googleRequest('GET',url);
+      (r.items||[]).filter(g=>g.status!='cancelled').forEach(g=>out.push(eventFromGoogle(g,name)));
+      pageToken=r.nextPageToken||'';
+    }while(pageToken);
+  }));
   return out;
 }
 async function fetchTasks(){
   if(USE_DUMMY_DATA)return dummyTasks();
   const out=[];
-  for(const tag of Object.keys(L)){
+  await Promise.all(Object.keys(L).map(async tag=>{
     if(!listIds[tag])continue;
-    const r=await googleRequest('GET','https://tasks.googleapis.com/tasks/v1/lists/'+listIds[tag]+'/tasks?showCompleted=true&showHidden=true&maxResults=100');
-    (r.items||[]).forEach(g=>out.push(taskFromGoogle(g,tag,listIds[tag])));
-  }
+    let pageToken='';
+    do{
+      const url='https://tasks.googleapis.com/tasks/v1/lists/'+listIds[tag]+'/tasks?showCompleted=true&showHidden=true&maxResults=100'+(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
+      const r=await googleRequest('GET',url);
+      (r.items||[]).forEach(g=>out.push(taskFromGoogle(g,tag,listIds[tag])));
+      pageToken=r.nextPageToken||'';
+    }while(pageToken);
+  }));
   return out;
 }
 
-/* ---- 5. WRITE: create / update / delete ONE item at a time (respects DRY_RUN) ---- */
-async function createCalendarEvent(e){
-  try{const r=await googleRequest('POST','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events',eventToGoogle(e));e.gid=r.id}catch(x){syncFail(x)}
-  return e;
+/* ---- 5. WRITE: create / update / delete ONE item at a time (serialized per item, optimistic UI) ---- */
+function createCalendarEvent(e){
+  return enqueueSync('ev:'+e.id,async()=>{
+    try{const r=await googleRequest('POST',calUrl(e.cal),eventToGoogle(e));e.gid=r.id}catch(x){syncFail(x)}
+    return e;
+  });
 }
-async function updateCalendarEvent(e){
-  if(!e.gid&&!DRY_RUN)return e;   /* only events that exist in Google can be patched */
-  if(e.rid&&e.rec&&e.rec!='none'){try{await googleRequest('PATCH','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events/'+e.rid,{recurrence:[rruleOf(e.rec,e.allDay)]});e.rec='none';toast('Series rule updated in Google Calendar')}catch(x){syncFail(x)}}   /* new rule for the whole series = patch the master event */
-  try{await googleRequest('PATCH','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events/'+(e.gid||'DRY'),eventToGoogle(e))}catch(x){syncFail(x)}
-  return e;   /* NOTE: changing the calendar of an existing event needs events.move - not implemented */
+function updateCalendarEvent(e,scope='this',orig={day:e.day,s:e.s,allDay:e.allDay}){
+  return enqueueSync('ev:'+(e.rid||e.gid||e.id),async()=>{
+    if(!e.gid&&!e.rid&&!DRY_RUN)return e;
+    const base=calUrl(e.cal),master=e.rid||e.gid;
+    try{
+      if(scope==='all'&&master){
+        const m=DRY_RUN?{start:{dateTime:tzDateTime(e.day,e.s)},end:{dateTime:tzDateTime(e.day,e.e)},recurrence:[]}:await googleRequest('GET',base+'/'+master);
+        const mDay=(m.start&&m.start.date)?m.start.date:(m.start&&m.start.dateTime?iso(new Date(m.start.dateTime)):e.day);
+        const dayDelta=Math.round((P(e.day)-P(orig.day))/864e5);
+        const newMasterDay=iso(add(P(mDay),dayDelta));
+        const durDays=e.endDay&&e.endDay>e.day?Math.round((P(e.endDay)-P(e.day))/864e5):0;
+        const patch=eventToGoogle({...e,rid:null,day:newMasterDay,endDay:iso(add(P(newMasterDay),durDays))});
+        if(e.rec&&e.rec!=='none'){const rr=rruleOf(e.rec,e.allDay);if(rr)patch.recurrence=[rr]}
+        else if(m.recurrence)patch.recurrence=m.recurrence;
+        if(!e.allDay){const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;patch.start.timeZone=tz;patch.end.timeZone=tz}
+        await googleRequest('PATCH',base+'/'+master,patch);
+        const allEv=await fetchCalendarEvents();events=allEv;render();
+      }else if(scope==='following'&&master){
+        const m=DRY_RUN?{start:{dateTime:tzDateTime(orig.day,orig.s)},recurrence:[]}:await googleRequest('GET',base+'/'+master);
+        const mStart=new Date((m.start&&m.start.dateTime)||((m.start&&m.start.date||orig.day)+'T00:00'));
+        const cutStart=new Date(orig.allDay?orig.day+'T00:00':tzDateTime(orig.day,orig.s));
+        let existingRules=(m.recurrence||[]).filter(r=>r.startsWith('RRULE:'));
+        if(!existingRules.length&&e.rec&&e.rec!=='none'){const rr=rruleOf(e.rec,e.allDay);if(rr)existingRules=[rr]}
+        if(!existingRules.length)existingRules=['RRULE:FREQ=WEEKLY'];
+        const newRules=(e.rec&&e.rec!=='none')?[rruleOf(e.rec,e.allDay)]:existingRules.map(r=>r.replace(/;?(UNTIL|COUNT)=[^;]*/g,''));
+        if(mStart>=cutStart){
+          const patch=eventToGoogle({...e,rid:null});
+          patch.recurrence=newRules.filter(Boolean);
+          if(!e.allDay){const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;patch.start.timeZone=tz;patch.end.timeZone=tz}
+          await googleRequest('PATCH',base+'/'+master,patch);
+        }else{
+          await endCalendarSeries(e,orig);
+          const body=eventToGoogle({...e,rid:null});
+          body.recurrence=newRules.filter(Boolean);
+          if(!e.allDay){const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;body.start.timeZone=tz;body.end.timeZone=tz}
+          await googleRequest('POST',base,body);
+        }
+        const allEv=await fetchCalendarEvents();events=allEv;render();
+      }else{
+        if(e.rid){
+          await googleRequest('PATCH',base+'/'+(e.gid||'DRY'),eventToGoogle(e));
+        }else if(e.rec&&e.rec!=='none'&&e.gid){
+          const a=encodeURIComponent(new Date(orig.day+'T00:00').toISOString()),b=encodeURIComponent(new Date(iso(add(P(orig.day),1))+'T00:00').toISOString());
+          const inst=DRY_RUN?{items:[{id:'dry-inst'}]}:await googleRequest('GET',base+'/'+e.gid+'/instances?timeMin='+a+'&timeMax='+b);
+          if(inst.items&&inst.items[0]){
+            await googleRequest('PATCH',base+'/'+inst.items[0].id,eventToGoogle({...e,rec:'none'}));
+            const allEv=await fetchCalendarEvents();events=allEv;render();
+          }else{
+            await googleRequest('PATCH',base+'/'+e.gid,eventToGoogle(e));
+          }
+        }else{
+          await googleRequest('PATCH',base+'/'+(e.gid||'DRY'),eventToGoogle(e));
+        }
+      }
+    }catch(x){syncFail(x)}
+    return e;
+  });
 }
-async function deleteCalendarEvent(e){   /* ONE event the user chose to delete */
-  if(!e.gid&&!DRY_RUN)return;
-  try{await googleRequest('DELETE','https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calIds[e.cal]||'primary')+'/events/'+(e.gid||'DRY'))}catch(x){syncFail(x)}
+function deleteCalendarEvent(e){
+  if(!e.gid&&!DRY_RUN)return Promise.resolve();
+  return enqueueSync('ev:'+e.id,async()=>{
+    try{await googleRequest('DELETE',calUrl(e.cal)+'/'+(e.gid||'DRY'))}catch(x){syncFail(x)}
+  });
 }
-async function createTaskList(name){
-  try{const r=await googleRequest('POST','https://tasks.googleapis.com/tasks/v1/users/@me/lists',{title:name});listIds[name]=r.id}catch(x){syncFail(x)}
+function createTaskList(name){
+  return enqueueSync('list:'+name,async()=>{
+    if(listIds[name])return;
+    try{const r=await googleRequest('POST','https://tasks.googleapis.com/tasks/v1/users/@me/lists',{title:name});listIds[name]=r.id}catch(x){syncFail(x)}
+  });
 }
-async function createTask(t){
-  try{
-    if(!listIds[t.tag])await createTaskList(t.tag);
-    const r=await googleRequest('POST','https://tasks.googleapis.com/tasks/v1/lists/'+(listIds[t.tag]||'@default')+'/tasks',taskToGoogle(t));
-    t.gid=r.id;t.gl=listIds[t.tag];
-  }catch(x){syncFail(x)}
-  return t;
+function createTask(t){
+  return enqueueSync('tk:'+t.id,async()=>{
+    try{
+      if(!listIds[t.tag])await createTaskList(t.tag);
+      const r=await googleRequest('POST','https://tasks.googleapis.com/tasks/v1/lists/'+(listIds[t.tag]||'@default')+'/tasks',taskToGoogle(t));
+      t.gid=r.id;t.gl=listIds[t.tag];
+    }catch(x){syncFail(x)}
+    return t;
+  });
 }
-async function updateTask(t){
-  if(!t.gid&&!DRY_RUN)return t;
-  try{
-    if(t.gl&&listIds[t.tag]&&t.gl!==listIds[t.tag]){   /* tag changed: Google cannot move a task between lists with PATCH -> create in the new list, then delete the old copy (one task) */
-      const old={gid:t.gid,gl:t.gl};await createTask(t);
-      await googleRequest('DELETE','https://tasks.googleapis.com/tasks/v1/lists/'+old.gl+'/tasks/'+old.gid);
-    }else await googleRequest('PATCH','https://tasks.googleapis.com/tasks/v1/lists/'+(t.gl||'@default')+'/tasks/'+(t.gid||'DRY'),taskToGoogle(t));
-  }catch(x){syncFail(x)}
-  return t;
+function updateTask(t){
+  if(!t.gid&&!DRY_RUN)return Promise.resolve(t);
+  return enqueueSync('tk:'+t.id,async()=>{
+    try{
+      if(!listIds[t.tag])await createTaskList(t.tag);
+      if(t.gl&&listIds[t.tag]&&t.gl!==listIds[t.tag]){
+        const old={gid:t.gid,gl:t.gl};
+        const r=await googleRequest('POST','https://tasks.googleapis.com/tasks/v1/lists/'+listIds[t.tag]+'/tasks',taskToGoogle(t));
+        t.gid=r.id;t.gl=listIds[t.tag];
+        await googleRequest('DELETE','https://tasks.googleapis.com/tasks/v1/lists/'+old.gl+'/tasks/'+old.gid);
+      }else await googleRequest('PATCH','https://tasks.googleapis.com/tasks/v1/lists/'+(t.gl||'@default')+'/tasks/'+(t.gid||'DRY'),taskToGoogle(t));
+    }catch(x){syncFail(x)}
+    return t;
+  });
 }
-async function deleteTask(t){   /* ONE task the user chose to delete */
-  if(!t.gid&&!DRY_RUN)return;
-  try{await googleRequest('DELETE','https://tasks.googleapis.com/tasks/v1/lists/'+(t.gl||'@default')+'/tasks/'+(t.gid||'DRY'))}catch(x){syncFail(x)}
+function deleteTask(t){
+  if(!t.gid&&!DRY_RUN)return Promise.resolve();
+  return enqueueSync('tk:'+t.id,async()=>{
+    try{await googleRequest('DELETE','https://tasks.googleapis.com/tasks/v1/lists/'+(t.gl||'@default')+'/tasks/'+(t.gid||'DRY'))}catch(x){syncFail(x)}
+  });
 }
 
 /* ---- 5b. Repeating events: delete ONE occurrence / this and following / the whole series ---- */
@@ -596,7 +709,7 @@ const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const dl=s=>P(s).toLocaleDateString('en',{weekday:'short',day:'numeric',month:'short'});
 let cur=new Date(TODAY),id=100,tt,queued=0;
 let notes=loadSeedNotes();
-let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='week',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='events',view='today',filt='All',sortBy='tag',showDone=false,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
+let calOff=new Set(),findOff=new Set(),noteMode=false,noteSelIds=new Set(),showHold=false,tagHold=new Set(),lpT=null,lpFired=false,dragState=null,dragJust=false,lastN=1,noteDragOn=false,taskMode=false,taskSelIds=new Set(),planRange='week',ndState=null,restoreList=[],calHide=new Set(),calOpen=false,S={target:6,start:6,end:24,theme:'system',sumMode:'visible',sumCals:[],planStart:null,planEnd:null,goal:75,tagColors:{},ahead:0},monMode='events',pickMode=false,pickSel=new Set(),pickBack='today',wkMode='events',view='today',filt='All',sortBy='tag',showDone=false,showInfo=true,picked=new Set(),nSel=new Set(),filtQ='',filtObj=null,F={},D={};
 const col=t=>(S.tagColors&&S.tagColors[t])||L[t]||'#6B7587',CAL_ADJ={'#8e24aa':'#9A1FA6','#b39ddb':'#9F8CF2'},ec=e=>{if(e.hol)return '#9AA3B2';const c=CAL[e.cal]||'#4285F4';return CAL_ADJ[c.toLowerCase()]||c};
 const nTags=()=>[...new Set(['General',...notes.map(n=>n.tag)])].sort();
 const fmt=h=>{const H=Math.floor(h),m=Math.round((h-H)*60);return H+':'+String(m).padStart(2,'0')};
@@ -610,7 +723,7 @@ const evSpan=(e,k)=>{if(!isMulti(e))return e;const n=Math.round((P(e.endDay)-P(e
 const dayTag=e=>e._n?` <span class="dayn">Dag ${e._i} af ${e._n}</span>`:'';
 const tkOn=d=>tasks.filter(t=>tagVis(t)&&t.date==iso(d)&&(!t.blk||calOff.has((events.find(x=>x.id==t.blk)||{}).cal)));
 function toast(m,u){const t=$('#toast');t.innerHTML=esc(m)+(u?' <button style="text-decoration:underline;font-weight:600;margin-left:8px" onclick="UN()">Undo</button>':'');window.UN=()=>{u();t.classList.remove('on')};t.style.pointerEvents=u?'auto':'none';t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),u?5000:2200)}
-function updSyn(){$('#syn').innerHTML=!navigator.onLine?'<i style="background:#E5484D"></i>Offline · '+queued+' queued':DRY_RUN?'<i style="background:#E8A317"></i>Dry run: nothing is sent':USE_DUMMY_DATA?'<i></i>Demo data':'<i></i>Synced'}
+function updSyn(){$('#syn').innerHTML=!navigator.onLine?'<i style="background:#E5484D"></i>Offline · '+queued+' queued':_syncBusy>0?'<i style="background:#2F6FED"></i>Syncing…':DRY_RUN?'<i style="background:#E8A317"></i>Dry run: nothing is sent':USE_DUMMY_DATA?'<i></i>Demo data':'<i></i>Synced'}
 function synced(m,u){if(!navigator.onLine){queued++;updSyn();toast('Offline: saved, '+queued+' waiting to sync',u)}else toast(DRY_RUN?m+' (dry run)':m,u)}
 addEventListener('offline',updSyn);addEventListener('online',()=>{queued=0;updSyn();toast('Back online: all changes synced')});
 function nav(){const n=[['today','◔','Day'],['week','▦','Week'],['month','▤','Month'],['tasks','✓','Tasks'],['notes','✎','Notes']];
@@ -686,7 +799,7 @@ const inEvTxt=t=>{const b=t.time==null?blkInfo(t):null;return t.time!=null?' · 
 function taskRow(t){const pe=t.date&&t.date<iso(TODAY)&&t.p<2,tv=view=='tasks',sel=tv&&taskSelIds.has(t.id);
 const lead=tv&&taskMode?`<span class="st" style="--c:${col(t.tag)}">${sel?'☑':'☐'}</span>`:`<button class="st" style="--c:${col(t.tag)}" onclick="event.stopPropagation();setP(${t.id},(${t.p}+1)%3)" aria-label="Change status">${SY[t.p]}</button>`;
 const ev=tv?`onpointerdown="tpDown(${t.id})" onpointerup="tpUp()" onpointerleave="tpUp()" onpointercancel="tpUp()" oncontextmenu="return false" onclick="taskClick(${t.id})"`:`onclick="detail('task',${t.id})"`;
-return `<div class="task ${t.p==2?'done':''} ${sel?'sel':''}" style="--c:${col(t.tag)}"${view=='today'?` data-dk="u${t.id}"`:''} ${ev}>${lead}
+return `<div class="task ${t.p==2?'done':''} ${sel?'sel':''} ${tv&&!showInfo?'compact':''}" style="--c:${col(t.tag)}"${view=='today'?` data-dk="u${t.id}"`:''} ${ev}>${lead}
 <div class="t"><b>${ic(t.icon)} ${esc(t.t)}</b><div class="m">${PN[t.p]}${t.date?' · '+dl(t.date):''}${inEvTxt(t)} · <span class="tgn">${tl(t.tag)}</span>${t.due?' · due '+dl(t.due):''}</div></div>${pe?'<span class="pend" title="Pending">!</span>':''}</div>`}
 function pk(i){picked.has(i)?picked.delete(i):picked.add(i);render()}
 /* ---- Repeating tasks: finishing creates a NEW task for the next date; the finished one stays as history ---- */
@@ -715,7 +828,7 @@ function futureOcc(cv){const a=90;   /* virtual occurrences: 3 months, never pas
       out.push({v:1,base:t,t:t.t,tag:t.tag,icon:t.icon,time:t.time,date:d,rec:t.rec,rem:t.rem})}});
   return out.sort((x,y)=>x.date.localeCompare(y.date)||(x.time??25)-(y.time??25))}
 function vpill(o,cls){return `<button class="${cls} virt" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')" title="Projected from repeat rule">\u21BB ${o.time!=null?fmt(o.time)+' ':''}${ic(o.icon)} <span class="tn">${esc(o.t)}</span></button>`}
-function vrow(o){return `<div class="task virt" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')"><span class="st" style="--c:${col(o.tag)}">\u21BB</span><div class="t"><b>${ic(o.icon)} ${esc(o.t)}</b><div class="m">Projected · ${dl(o.date)}${inEvTxt(o)} · <span class="tgn">${tl(o.tag)}</span></div></div></div>`}
+function vrow(o){return `<div class="task virt ${view=='tasks'&&!showInfo?'compact':''}" style="--c:${col(o.tag)}" onclick="vDetail(${o.base.id},'${o.date}')"><span class="st" style="--c:${col(o.tag)}">\u21BB</span><div class="t"><b>${ic(o.icon)} ${esc(o.t)}</b><div class="m">Projected · ${dl(o.date)}${inEvTxt(o)} · <span class="tgn">${tl(o.tag)}</span></div></div></div>`}
 function vDetail(bid,date){const b=tasks.find(x=>x.id==bid);if(!b)return;
 sheet(`<div class="sub"><span class="dot" style="background:${col(b.tag)}"></span>${tl(b.tag)} list</div><h2>${ic(b.icon)} ${esc(b.t)}</h2><div class="sub" style="margin:-4px 0 8px">Projected from the repeat rule. Not created in Google Tasks yet.</div><div style="margin:0 0 8px">${bdg(b)}</div><div style="margin-bottom:12px">${dl(date)}${b.time!=null?' at '+fmt(b.time):''}</div><button class="btn alt" style="margin-bottom:8px" onclick="skipVirtual(${bid},'${date}')">Skip this occurrence</button><button class="btn" onclick="close_()">Close</button>`)}
 function skipVirtual(bid,date){const sn=snapState(),b=tasks.find(x=>x.id==bid);if(!b)return;b.skip=[...(b.skip||[]),date];updateTask(b);close_();render();toast('Occurrence skipped',()=>{undoTo(sn)();const b0=tasks.find(x=>x.id==bid);if(b0)updateTask(b0)})}
@@ -727,8 +840,9 @@ function vTasks(){const pm=pickMode,td=iso(TODAY),lim=planRange=='week'?iso(add(
 base=tasks.filter(t=>(filt=='All'||t.tag==filt)&&(!lim||(t.date&&t.date<=lim&&(t.p<2||t.date>=td)))),op=base.filter(t=>t.p<2);
 const _et=new Map(),et=x=>{if(!_et.has(x))_et.set(x,x.time??(blkInfo(x)||{}).s??25);return _et.get(x)},srt=a=>[...a].sort((x,y)=>sortBy=='tag'?x.tag.localeCompare(y.tag):sortBy=='status'?x.p-y.p:sortBy=='date'?(x.date||'9999').localeCompare(y.date||'9999')||et(x)-et(y):x.t.localeCompare(y.t));
 const vo=(!pm&&!taskMode)?futureOcc().filter(o=>(filt=='All'||o.tag==filt)&&(!lim||o.date<=lim)).map(o=>({...o,p:0})):[];
-const _un=new Set(),unc=[...op.filter(t=>!t.date&&t.tag=='Uncategorized'),...(planRange=='week'?tasks.filter(t=>t.p<2&&!t.date&&t.tag=='Uncategorized'&&(filt=='All'||t.tag==filt)):[])].filter(t=>_un.has(t.id)?false:(_un.add(t.id),true));   /* One Week hides undated tasks, so undated Uncategorized ones are added here; the Set prevents duplicates */
-const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',op.filter(t=>!t.date&&t.tag!='Uncategorized')],['Uncategorized',unc]];
+const _un=new Set(),unc=[...op.filter(t=>!t.date&&t.tag=='Uncategorized'),...(planRange=='week'?tasks.filter(t=>t.p<2&&!t.date&&t.tag=='Uncategorized'&&(filt=='All'||t.tag==filt)):[])].filter(t=>_un.has(t.id)?false:(_un.add(t.id),true));
+const _np=new Set(),notPlanned=[...op.filter(t=>!t.date&&t.tag!='Uncategorized'),...(planRange=='week'&&sortBy=='date'?tasks.filter(t=>t.p<2&&!t.date&&t.tag!='Uncategorized'&&(filt=='All'||t.tag==filt)):[])].filter(t=>_np.has(t.id)?false:(_np.add(t.id),true));
+const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',notPlanned],['Uncategorized',unc]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
 const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=n=='Completed'?[...a].sort((x,y)=>(y.doneAt||0)-(x.doneAt||0)||(y.date||'').localeCompare(x.date||'')):srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
 const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${body(n,a)}`).join('');
@@ -737,7 +851,7 @@ const bar=pm?`<div class="pickbar"><span>Select tasks (${pickSel.size})</span><s
 return bar+`<div class="chips">${['All',...Object.keys(L)].map(k=>`<button class="chip ${filt==k?'on':''}" onclick="filt='${k}';render()">${k!='All'?`<span class="dot" style="background:${col(k)}"></span>`:''}${tl(k)}</button>`).join('')}</div>
 <div class="pad"><div class="row" style="margin-bottom:2px"><span class="sub">Sort</span><select class="sortsel" onchange="sortBy=S.sortBy=this.value;render()">${[['tag','Tag'],['date','Date'],['status','Status'],['name','Name']].map(([k,l])=>`<option value="${k}" ${sortBy==k?'selected':''}>${l}</option>`).join('')}</select>
 <select class="sortsel" onchange="planRange=this.value;render()">${[['all','All'],['week','One Week'],['month','One Month']].map(([k,l])=>`<option value="${k}" ${planRange==k?'selected':''}>${l}</option>`).join('')}</select>
-${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button>`}</div>
+${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button><button class="chip ${showInfo?'on':''}" onclick="showInfo=S.showInfo=!showInfo;render()">Info</button>`}</div>
 ${list||'<div class="empty">No tasks here yet. Tap + to add one.</div>'}</div>`}
 function vNotes(){const vis=n=>showHold||!n.hold,tg=nTags().filter(t=>(!nSel.size||nSel.has(t))&&notes.some(n=>n.tag==t&&vis(n)));
 const row=(n,dp,L)=>`<div class="note ${n.hold?'held':''} ${noteSelIds.has(n.id)?'sel':''} ${noteDragOn?'dragmode':''}" data-nid="${n.id}" style="margin-left:${Math.min(dp,4)*18}px" onpointerdown="npDown(${n.id})" onpointerup="npUp()" onpointerleave="npUp()" onpointercancel="npUp()" oncontextmenu="return false" onclick="noteClick(${n.id})">${noteDragOn?`<span class="gh2" data-nh="${n.id}" role="button" aria-label="Drag note" title="Drag to move" onclick="event.stopPropagation()">\u283F</span>`:''}<span class="bl">${noteMode?(noteSelIds.has(n.id)?'☑':'☐'):(dp?'◦':'•')}</span><span>${esc(n.t)}</span>${n.hold?`<span class="hi" title="On hold">${pauseIcon(14)}</span>`:''}</div>`+L.filter(c=>c.parent==n.id).sort((a,b)=>b.ts-a.ts).map(c=>row(c,dp+1,L)).join('');
@@ -856,7 +970,9 @@ const h=S.start+s.top/54,tm=s.el.querySelector('.tm');if(tm)tm.textContent=s.dur
 function dragEnd(){clearTimeout(dragT);const s=dragState;if(!s)return;dragState=null;const sn=snapState();dragJust=true;setTimeout(()=>{dragJust=false},350);
 if(s.k[0]=='u'){s.ghost.remove();s.el.classList.remove('dragging');if(s.over){const t=tasks.find(x=>x.id==+s.k.slice(1));if(isRep(t))askRepeatMove(t,iso(cur),s.h,sn);else{planTask(t,iso(cur),s.h,null);synced('Planned '+dl(t.date)+' at '+fmt(s.h),undoTo(sn))}}render();return}
 const h=S.start+s.top/54,i=+s.k.slice(1);
-if(s.k[0]=='e'){const e=events.find(x=>x.id==i),d=e.e-e.s;e.s=Math.min(h,24-d);e.e=e.s+d;window.updateCalendarEvent&&updateCalendarEvent(e)}
+if(s.k[0]=='e'){const e=events.find(x=>x.id==i),d=e.e-e.s,ns=Math.min(h,24-d),ne=ns+d;
+  if(isRecEv(e)){const od=(e.rid?e.day:(curOcc&&evOn(P(curOcc)).includes(e)?curOcc:e.day));promptEventEditScope(e,{...e,day:od,s:ns,e:ne},{day:od,s:e.s,allDay:e.allDay},sn);render();return}
+  e.s=ns;e.e=ne;window.updateCalendarEvent&&updateCalendarEvent(e,'this',{day:e.day,s:e.s,allDay:e.allDay})}
 else{const t=tasks.find(x=>x.id==i);if(isRep(t)){askRepeatMove(t,t.date,h,sn);render();return}t.time=h;window.updateTask&&updateTask(t)}
 synced('Rescheduled to '+fmt(h),undoTo(sn));render()}
 function micIcon(){return '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}
@@ -1073,7 +1189,7 @@ function applyRepeatMove(all){const m=pendMove;pendMove=null;const t=m&&tasks.fi
   planTask(t,m.nd,m.nt,t.blk);close_();render();synced(all?'Moved this and following':'Moved this occurrence only',undoTo(m.sn))}
 function sheet(h){$('#panel').innerHTML='<button class="xbtn" onclick="closeX()" aria-label="Close">✕</button>'+h;$('#sheet').classList.add('open')}
 const isOpen=()=>$('#sheet').classList.contains('open');
-function close_(){if(pendMove){pendMove=null;setTimeout(render,0)}   /* cancelled: put the dragged task back */
+function close_(){if(pendMove||pendEvEdit){pendMove=null;pendEvEdit=null;setTimeout(render,0)}
 if(D.kind=='note'){const ta=$('#nedit'),n=notes.find(x=>x.id==D.id);if(ta&&n&&ta.value.trim()&&ta.value.trim()!=n.t)n.t=ta.value.trim()}
 $('#sheet').classList.remove('open');D={};if(view=='notes')render()}
 $('#sheet').onclick=e=>{if(e.target.id=='sheet')close_()};
@@ -1129,10 +1245,17 @@ if(nt){tag=nt;if(k=='task'&&!L[nt]){L[nt]=PAL[Object.keys(L).length%4];createTas
 if(k=='task'){const o=F.id&&tasks.find(x=>x.id==F.id),d=F.d||(F.rec!='none'?iso(TODAY):null),tm=d&&F.s?hh(F.s):null;
 if(o){const was0=o.p;logMove(o,d,tm);if(o.blk&&o.date!=d)o.blk=null;Object.assign(o,{t,tag,icon:F.icon,p:F.p,date:d,time:tm,rec:F.rec,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem});if(o.rec!='none'){o.sid=o.sid||newSid();o.occ=o.occ||o.date}if(o.p==2&&was0!=2)o.doneAt=Date.now();if(o.p==2&&was0!=2&&o.rec!='none')spawnNext(o);updateTask(o)}else{const nw={id:id++,t,tag,icon:F.icon,p:F.p,date:d,time:tm,blk:null,rec:F.rec,sid:F.rec!='none'?newSid():null,occ:F.rec!='none'?d:null,due:F.due||null,desc:F.desc.trim(),rem:F.rem===''?null:+F.rem};tasks.unshift(nw);createTask(nw)}}
 else if(k=='event'){const ad=F.allDay,s=ad?0:hh(F.s),e=ad?24:hh(F.e);const ed=F.ed&&F.ed>F.d?F.ed:F.d;if(F.ed&&F.d&&F.ed<F.d)return toast('End date cannot be before the start date');if(ed>F.d&&F.rec&&F.rec!='none')return toast('Multi-day events cannot repeat');if((!ad&&ed==F.d&&!(e>s))||!F.d)return toast('Check date and times');const v={t,cal:F.cal,day:F.d,endDay:ed,s,e,allDay:ad,rec:F.rec,loc:F.loc.trim(),desc:F.desc.trim(),rem:F.rem=='d'?undefined:(F.rem===''?null:+F.rem)},o=F.id&&events.find(x=>x.id==F.id);let ev=o;
-let evP=null;if(o){Object.assign(o,v);updateCalendarEvent(o)}else{ev={id:id++,...v};events.push(ev);evP=createCalendarEvent(ev)}
 if(!ad){const pt=($('#fnewt')||{}).value;if(pt&&pt.trim())(F.newTasks=F.newTasks||[]).push({t:pt.trim(),tag:($('#fnewtag')||{}).value||Object.keys(L)[0]})}
-const fresh=ad?[]:(F.newTasks||[]).filter(n=>n.tag).map(n=>({id:id++,t:n.t,tag:n.tag,icon:'',p:0,date:ev.day,time:null,blk:null,rec:'none',sid:null,occ:null,due:null,desc:'',hist:[]}));fresh.forEach(x=>tasks.unshift(x));
-assignTasksToEvent(ev,ad?[]:[...F.tasks,...fresh.map(x=>x.id)],evP,fresh)}
+const fresh=ad?[]:(F.newTasks||[]).filter(n=>n.tag).map(n=>({id:id++,t:n.t,tag:n.tag,icon:'',p:0,date:v.day,time:null,blk:null,rec:'none',sid:null,occ:null,due:null,desc:'',hist:[]}));
+const taskIds=ad?[]:[...F.tasks,...fresh.map(x=>x.id)];
+if(o&&isRecEv(o)){
+  const origDay=o.rid?o.day:(curOcc&&evOn(P(curOcc)).includes(o)?curOcc:o.day);
+  promptEventEditScope(o,v,{day:origDay,s:o.s,allDay:o.allDay},sn0,{fresh,taskIds,from:F.from});
+  return;
+}
+let evP=null;if(o){const orig={day:o.day,s:o.s,allDay:o.allDay};Object.assign(o,v);updateCalendarEvent(o,'this',orig)}else{ev={id:id++,...v};events.push(ev);evP=createCalendarEvent(ev)}
+fresh.forEach(x=>tasks.unshift(x));
+assignTasksToEvent(ev,taskIds,evP,fresh)}
 else addNotes(t,tag);
 if(F.from){const fn=notes.find(n=>n.id==F.from);notes.forEach(n=>{if(fn&&n.parent==fn.id)n.parent=fn.parent||null});notes=notes.filter(n=>n.id!=F.from)}
 close_();synced(k=='note'?(lastN>1?lastN+' notes created':'Note saved'):'Saved & synced to Google '+(k=='task'?'Tasks':'Calendar')+msg+(F.from?' · note removed':''),undoTo(sn0));render()}
@@ -1144,6 +1267,54 @@ function del(){const k=F.kind;
   if(k=='event'){const e=events.find(x=>x.id==F.id);if(e&&(e.rid||(e.rec&&e.rec!='none')))return promptDelete(e,'event')}
   if(k=='task'){const t=tasks.find(x=>x.id==F.id);if(t&&t.rec&&t.rec!='none')return promptDelete(t,'task')}
   removeItems(k,F.id,'this')}
+let pendEvEdit=null;
+function promptEventEditScope(ev,newVals,orig,sn,extra){
+  pendEvEdit={ev,newVals,orig,sn,extra:extra||null};
+  const opts=[
+    ['this','This instance','Only this occurrence is changed'],
+    ['following','This and following instances','Updates this occurrence and all future ones in the series'],
+    ['all','All instances in the series','Updates every occurrence across the entire series']
+  ];
+  sheet(`<h2>Edit repeating event</h2><div class="sd" style="margin:-2px 0 12px">${esc(newVals.t)}</div>${opts.map(([m,l,h])=>`<button class="btn alt delopt" onclick="applyEventEditScope('${m}')"><b>${l}</b><span>${h}</span></button>`).join('')}<button class="chip" onclick="pendEvEdit=null;close_();render()">Cancel</button>`);
+}
+function applyEventEditScope(scope){
+  const p=pendEvEdit;pendEvEdit=null;if(!p){close_();return}
+  const {ev,newVals,orig,sn,extra}=p;
+  if(scope==='all'&&ev.rid){
+    const dayDelta=Math.round((P(newVals.day)-P(orig.day))/864e5);
+    events.filter(x=>x.rid===ev.rid&&x.cal===ev.cal).forEach(x=>{
+      x.t=newVals.t;x.s=newVals.s;x.e=newVals.e;x.allDay=newVals.allDay;x.loc=newVals.loc;x.desc=newVals.desc;x.rem=newVals.rem;
+      if(dayDelta)x.day=iso(add(P(x.day),dayDelta));
+      if(x.endDay)x.endDay=iso(add(P(x.endDay),dayDelta));
+    });
+  }else if(scope==='following'&&ev.rid){
+    const dayDelta=Math.round((P(newVals.day)-P(orig.day))/864e5);
+    events.filter(x=>x.rid===ev.rid&&x.cal===ev.cal&&(x.day>orig.day||(x.day===orig.day&&x.s>=orig.s))).forEach(x=>{
+      x.t=newVals.t;x.s=newVals.s;x.e=newVals.e;x.allDay=newVals.allDay;x.loc=newVals.loc;x.desc=newVals.desc;x.rem=newVals.rem;
+      if(dayDelta)x.day=iso(add(P(x.day),dayDelta));
+      if(x.endDay)x.endDay=iso(add(P(x.endDay),dayDelta));
+    });
+  }else if(!ev.rid&&ev.rec&&ev.rec!=='none'&&scope==='this'){
+    ev.ex=[...(ev.ex||[]),orig.day];
+    const single={id:id++,...newVals,rec:'none'};
+    events.push(single);
+  }else if(!ev.rid&&ev.rec&&ev.rec!=='none'&&scope==='following'&&orig.day>ev.day){
+    ev.until=iso(add(P(orig.day),-1));
+    const nextSeries={id:id++,...newVals,rec:newVals.rec&&newVals.rec!=='none'?newVals.rec:ev.rec};
+    events.push(nextSeries);
+  }else{
+    Object.assign(ev,newVals);
+  }
+  const evP=updateCalendarEvent(ev,scope,orig);
+  if(extra){
+    (extra.fresh||[]).forEach(x=>tasks.unshift(x));
+    assignTasksToEvent(ev,extra.taskIds||[],evP,extra.fresh||[]);
+    if(extra.from){const fn=notes.find(n=>n.id==extra.from);notes.forEach(n=>{if(fn&&n.parent==fn.id)n.parent=fn.parent||null});notes=notes.filter(n=>n.id!=extra.from)}
+  }
+  close_();render();
+  const lbl=scope==='all'?'All instances updated':scope==='following'?'This and following updated':'This instance updated';
+  synced(lbl,undoTo(sn));
+}
 function promptDelete(item,type){   /* exactly three choices, like Google Calendar / Google Tasks */
   const ev=type=='event',o=[['this','This instance',ev?'Removes only this occurrence':'Moves the task to its next date'],['following','This and following instances',ev?'The series ends before this one':'Deletes the task and all future repeats'],['all','All instances in the series',ev?'Removes the whole series':'Deletes the task']];
   sheet(`<h2>Delete repeating ${ev?'event':'task'}</h2><div class="sd" style="margin:-2px 0 12px">${esc(item.t)}</div>${o.map(([m,l,h])=>`<button class="btn alt delopt" onclick="removeItems('${type}',${item.id},'${m}')"><b>${l}</b><span>${h}</span></button>`).join('')}`)}
@@ -1207,7 +1378,7 @@ document.addEventListener('touchend',e=>{
   const order=['today','week','month','tasks','notes'],n=order.indexOf(view)+dir;
   if(n>=0&&n<order.length)go(order[n]);
 },{passive:true});
-loadState();sortBy=S.sortBy||'date';
+loadState();sortBy=S.sortBy||'date';if(S.showInfo!==undefined)showInfo=!!S.showInfo;
 render();
 startApp();
 /* Tempo shows no notifications of its own: Google Calendar delivers event reminders */
