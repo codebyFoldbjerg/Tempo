@@ -635,7 +635,7 @@ return `<div class="ev${(e.e-e.s)<0.75?' short':''}" data-dk="e${e.id}" onclick=
 let last=-9e9;const tms=tm.map(t=>{const top=Math.min(Math.max(Math.max(0,t.time-HS)*PX+2,last+2),(HE-HS)*PX-28);last=top+28;if(t.v)return `<button class="tk virt" style="--c:${col(t.tag)};top:${top}px" onclick="vDetail(${t.base.id},'${t.date}')" title="Projected from repeat rule">\u21BB <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`;return `<button class="tk ${t.p==2?'done':''}" data-dk="t${t.id}" style="--c:${col(t.tag)};top:${top}px" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}).join('');
 const n=new Date(),nowH=n.getHours()+n.getMinutes()/60;
 const now=k==iso(TODAY)&&nowH>=HS&&nowH<=HE?`<div class="now" style="top:${Math.max(0,nowH-HS)*PX}px"></div>`:'';
-const pend=tasks.filter(t=>t.date&&t.date<iso(TODAY)&&t.p<2).sort((a,b)=>a.date.localeCompare(b.date)).map(taskRow).join('');
+const pend=tasks.filter(t=>isTaskPending(t)).sort((a,b)=>a.date.localeCompare(b.date)).map(taskRow).join('');
 return `<div class="pad">${(ad.length||dls.length||any.length||vo.some(o=>o.time==null))?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.filter(o=>o.time==null).map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${h}${evs}${tms}${now}</div>
 <b>Pending tasks</b> <span class="sub">planned earlier, not completed</span><div style="margin-top:8px">${pend||'<div class="empty">All caught up.</div>'}</div></div>`}
 
@@ -686,7 +686,9 @@ function blkInfo(t){const blk=t.v?t.base.blk:t.blk,d=t.date;if(!blk||!d)return n
   const ev=events.find(e=>!calOff.has(e.cal)&&!e.allDay&&(e.id==blk?(!isRecEv(e)||evOn(P(d)).includes(e)):(e.rid&&e.rid==evSer(blk)&&e.day==d)));if(!ev)return null;
   const x=blkT(ev,d).find(y=>t.v?(y.t.v&&vmap[y.t.id]&&vmap[y.t.id].bid==t.base.id):y.t.id==t.id);return{ev,s:x?x.s:ev.s}}
 const inEvTxt=t=>{const b=t.time==null?blkInfo(t):null;return t.time!=null?' · '+t24(t.time):b?' · '+t24(b.s)+' · in '+esc(b.ev.t):''};
-function taskRow(t){const pe=t.date&&t.date<iso(TODAY)&&t.p<2,tv=view=='tasks',sel=tv&&taskSelIds.has(t.id);
+function taskStartTime(t){if(t.time!=null)return t.time;const b=blkInfo(t);return b?b.s:null}
+function isTaskPending(t){if(!t||t.p>=2||!t.date)return false;const td=iso(TODAY);if(t.date<td)return true;if(t.date>td)return false;const st=taskStartTime(t);if(st==null)return false;const now=new Date(),nowH=now.getHours()+now.getMinutes()/60;return st<nowH}
+function taskRow(t){const pe=isTaskPending(t),tv=view=='tasks',sel=tv&&taskSelIds.has(t.id);
 const lead=tv&&taskMode?`<span class="st" style="--c:${col(t.tag)}">${sel?'☑':'☐'}</span>`:`<button class="st" style="--c:${col(t.tag)}" onclick="event.stopPropagation();setP(${t.id},(${t.p}+1)%3)" aria-label="Change status">${SY[t.p]}</button>`;
 const ev=tv?`onpointerdown="tpDown(${t.id})" onpointerup="tpUp()" onpointerleave="tpUp()" onpointercancel="tpUp()" oncontextmenu="return false" onclick="taskClick(${t.id})"`:`onclick="detail('task',${t.id})"`;
 return `<div class="task ${t.p==2?'done':''} ${sel?'sel':''}" style="--c:${col(t.tag)}"${view=='today'?` data-dk="u${t.id}"`:''} ${ev}>${lead}
@@ -738,7 +740,7 @@ const notPlannedList=tasks.filter(t=>{
   if(planRange=='week'?(t.date&&t.date<=lim):!!t.date)return false;
   return _np.has(t.id)?false:(_np.add(t.id),true);
 });
-const secs=[['Pending',op.filter(t=>t.date&&t.date<td)],['Planned',[...op.filter(t=>t.date&&t.date>=td),...vo]],['Not planned',notPlannedList],['Uncategorized',unc]];
+const secs=[['Pending',op.filter(t=>isTaskPending(t))],['Planned',[...op.filter(t=>t.date&&t.date>=td&&!isTaskPending(t)),...vo]],['Not planned',notPlannedList],['Uncategorized',unc]];
 if(showDone||pm)secs.push(['Completed',base.filter(t=>t.p==2)]);
 const rowF=x=>x.v?vrow(x):taskRow(x),wd=d=>new Date(d+'T12:00').toLocaleDateString('en',{weekday:'long'}),body=(n,a)=>{const q=n=='Completed'?[...a].sort((x,y)=>(y.doneAt||0)-(x.doneAt||0)||(y.date||'').localeCompare(x.date||'')):srt(a);if(pm)return q.map(pickRow).join('');if(n=='Planned'&&planRange=='week'&&sortBy=='date'){let last='';return q.map(x=>{const h=x.date!=last?`<div class="sub" style="margin:8px 0 2px;font-weight:700">${wd(x.date)} · ${dl(x.date)}</div>`:'';last=x.date;return h+rowF(x)}).join('')}return q.map(rowF).join('')};
 const list=secs.filter(x=>x[1].length).map(([n,a])=>`<div class="sechd">${n} <span class="sub">${a.length}</span></div>${body(n,a)}`).join('');
@@ -747,7 +749,7 @@ const bar=pm?`<div class="pickbar"><span>Select tasks (${pickSel.size})</span><s
 return bar+`<div class="chips">${['All',...Object.keys(L)].map(k=>`<button class="chip ${filt==k?'on':''}" onclick="filt='${k}';render()">${k!='All'?`<span class="dot" style="background:${col(k)}"></span>`:''}${tl(k)}</button>`).join('')}</div>
 <div class="pad"><div class="row" style="margin-bottom:2px"><span class="sub">Sort</span><select class="sortsel" onchange="sortBy=S.sortBy=this.value;render()">${[['tag','Tag'],['date','Date'],['status','Status'],['name','Name']].map(([k,l])=>`<option value="${k}" ${sortBy==k?'selected':''}>${l}</option>`).join('')}</select>
 <select class="sortsel" onchange="planRange=this.value;render()">${[['all','All'],['week','One Week'],['month','One Month']].map(([k,l])=>`<option value="${k}" ${planRange==k?'selected':''}>${l}</option>`).join('')}</select>
-${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button><button class="chip ${S.showInfo?'on':''}" onclick="S.showInfo=!S.showInfo;render()">Inf</button>`}</div>
+${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()" title="Show completed">✓</button><button class="chip ${S.showInfo?'on':''}" onclick="S.showInfo=!S.showInfo;render()">Inf</button>`}</div>
 ${list||'<div class="empty">No tasks here yet. Tap + to add one.</div>'}</div>`}
 
 /* ================== VIEW: NOTES ================== */
