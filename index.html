@@ -106,12 +106,13 @@ header{position:relative;padding-top:28px!important}.gear{position:absolute;top:
 .tchip.done,.tk.done,.pill.done,.sl.done{opacity:1;text-decoration:none}
 .done .tn{text-decoration:line-through;text-decoration-thickness:1px;opacity:.65}
 .task.done{opacity:.7}.pend{color:#F08C00;font-weight:800;font-size:20px;line-height:1;padding-left:4px}
-.sechd{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);margin:18px 0 8px;padding:9px 12px;border-radius:12px;background:color-mix(in srgb,var(--ink) 8%,var(--card));border-left:5px solid var(--ink);box-shadow:0 1px 3px #0000001a}
+.sechd{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);margin:8px 0 4px;padding:4px 10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 7%,var(--card));border-left:3px solid var(--ink)}
 .sechd::after{content:"";flex:1;height:0}
-.sechd .sub{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--mute);text-transform:none}
+.sechd .sub{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--mute);text-transform:none}
 body.task-compact .task .m{display:none}
-body.task-compact .task{padding-top:8px;padding-bottom:8px}
-body.task-compact .task .t b{font-size:14px}
+body.task-compact .task{padding:3px 10px;margin-bottom:3px;gap:6px}
+body.task-compact .task .st{min-width:28px;min-height:28px;width:28px;height:28px;font-size:20px}
+body.task-compact .task .t b{font-size:13.5px;line-height:1.25}
 .gh{font-weight:700;color:var(--ink)}.cell{position:relative}.ddl{position:absolute;top:2px;right:3px;color:#E5484D;font-weight:800;font-size:13px;font-style:normal}
 .adev.dl{--c:#E5484D}.ex2{color:#E5484D}
 .note{align-items:flex-start;user-select:none;-webkit-touch-callout:none}.note.held{opacity:.55}.note.sel{background:color-mix(in srgb,var(--ink) 8%,transparent)}
@@ -746,7 +747,7 @@ const bar=pm?`<div class="pickbar"><span>Select tasks (${pickSel.size})</span><s
 return bar+`<div class="chips">${['All',...Object.keys(L)].map(k=>`<button class="chip ${filt==k?'on':''}" onclick="filt='${k}';render()">${k!='All'?`<span class="dot" style="background:${col(k)}"></span>`:''}${tl(k)}</button>`).join('')}</div>
 <div class="pad"><div class="row" style="margin-bottom:2px"><span class="sub">Sort</span><select class="sortsel" onchange="sortBy=S.sortBy=this.value;render()">${[['tag','Tag'],['date','Date'],['status','Status'],['name','Name']].map(([k,l])=>`<option value="${k}" ${sortBy==k?'selected':''}>${l}</option>`).join('')}</select>
 <select class="sortsel" onchange="planRange=this.value;render()">${[['all','All'],['week','One Week'],['month','One Month']].map(([k,l])=>`<option value="${k}" ${planRange==k?'selected':''}>${l}</option>`).join('')}</select>
-${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button><button class="chip ${S.showInfo?'on':''}" onclick="S.showInfo=!S.showInfo;render()">Info</button>`}</div>
+${pm?'':`<button class="chip ${showDone?'on':''}" onclick="showDone=!showDone;render()">Show ✓</button><button class="chip ${S.showInfo?'on':''}" onclick="S.showInfo=!S.showInfo;render()">Inf</button>`}</div>
 ${list||'<div class="empty">No tasks here yet. Tap + to add one.</div>'}</div>`}
 
 /* ================== VIEW: NOTES ================== */
