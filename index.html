@@ -26,7 +26,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 header{padding:14px 18px 6px;display:flex;justify-content:space-between;align-items:end}
 h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
-.sub{color:var(--mute);font-size:12px}
+.sub{color:var(--mute);font-size:13px}
 .sync{font-size:12px;color:var(--mute);display:flex;gap:6px;align-items:center}
 .sync i{width:8px;height:8px;border-radius:50%;background:#14A38B}
 .pad{padding:8px 16px}
@@ -81,7 +81,7 @@ textarea{min-height:140px;resize:vertical}
 .opts{display:flex;gap:10px;margin-top:8px}.opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 6px;border-radius:16px;background:var(--bg);border:1px solid var(--line);font-size:26px}.opt span{font-size:14px;font-weight:600}
 h3{font-size:15px;margin-bottom:4px}.note{cursor:pointer}.note:last-child{border:0}.t.done b{text-decoration:line-through;opacity:.5}
 .right{text-align:right}#sum{display:block;line-height:1.45}
-.sy{font-size:17px;font-weight:900;line-height:1;color:var(--c,inherit);vertical-align:-1px;text-shadow:0.6px 0 currentColor,-0.6px 0 currentColor}
+.sy{font-size:17px;font-weight:800;line-height:1;color:var(--c,inherit);vertical-align:-1px}
 .task{padding:6px 10px;margin-bottom:5px;border-radius:12px;gap:10px}.task .t b{font-size:14px}.task .m{font-size:11px}.st{width:26px;height:26px;font-size:24px}
 .tk{height:26px;line-height:18px;background:color-mix(in srgb,var(--card) 88%,transparent)}
 .sl{display:block}.sl.done{text-decoration:line-through;opacity:.6}
@@ -133,26 +133,17 @@ body.task-compact .task .t b{font-size:13.5px;line-height:1.25}
 .nav button.on span{background:color-mix(in srgb,var(--ink) 11%,transparent);border-radius:12px;padding:2px 16px}
 .card,.task,.evbox{border-color:transparent;box-shadow:0 0 0 1px var(--line),0 2px 6px #0000000d}
 .st{min-width:36px;min-height:36px;display:grid;place-items:center}.chip{padding:8px 14px}.task{padding-top:8px;padding-bottom:8px}
-.panel{border-radius:28px 28px 0 0;padding-top:0;position:relative}.panel::before{content:none}
-.grab{padding:14px 0 10px;cursor:grab;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none}
-.grab i{display:inline-block;width:42px;height:4px;border-radius:4px;background:var(--line);transition:background .15s}
-.grab:active i{background:var(--mute)}
+.panel{border-radius:28px 28px 0 0;padding-top:28px;position:relative}.panel::before{content:"";position:absolute;top:10px;left:50%;width:42px;height:4px;margin-left:-21px;border-radius:4px;background:var(--line)}
 .cell.today{outline:none;border:2px solid var(--ink)}.cell.today>b{background:var(--ink);color:var(--bg);border-radius:8px;padding:0 6px;align-self:flex-start}
 .hr{border-top-color:color-mix(in srgb,var(--line) 55%,transparent)}.now::before{content:"";position:absolute;left:-4px;top:-4px;width:9px;height:9px;border-radius:50%;background:#E5484D}.ev{border-radius:12px}
 .fab{width:54px;height:54px;border-radius:18px;font-size:28px;bottom:calc(86px + env(safe-area-inset-bottom,0px))}body{padding-bottom:116px}
 .pickbar{flex-wrap:wrap;gap:8px}
-.dayrow.weekend{background:color-mix(in srgb,var(--ink) 4%,transparent)}
-.dayrow.past{opacity:.55}
-.dayrow.today-row{background:color-mix(in srgb,var(--acc) 7%,transparent)}
-.nowbar{position:sticky;top:var(--topbar-h,88px);z-index:9;height:0;pointer-events:none;margin-left:-44px;margin-right:6px}
-.nowbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#E5484D;opacity:.9}
-.nowbar span{position:absolute;right:-8px;top:-9px;background:#E5484D;color:#fff;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px #0003}
 .note.dragmode{touch-action:pan-y;cursor:default;outline:1px dashed var(--line);outline-offset:-1px}.note.ndrag{opacity:.35;transform:scale(.98);background:color-mix(in srgb,var(--ink) 8%,transparent);transition:opacity .12s,transform .12s}body.nd-active{user-select:none;-webkit-user-select:none;cursor:grabbing}.note.drop{outline:3px solid #2F6FED;outline-offset:-3px;background:color-mix(in srgb,#2F6FED 16%,transparent);border-radius:8px}.card.drop{outline:3px dashed #14A38B;outline-offset:-3px;background:color-mix(in srgb,#14A38B 10%,transparent)}.ghost.nd{display:flex;flex-direction:column;gap:2px;box-shadow:0 8px 24px #0005;padding:8px 14px;transform:scale(1.02)}.ghost.nd small{font-size:11.5px;font-weight:600;color:var(--mute);overflow:hidden;text-overflow:ellipsis}
 .opts{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:10px;margin-top:8px}
 .opt{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:88px;padding:12px 4px}
 .opt .oi{display:grid;place-items:center;width:30px;height:30px;font-style:normal;font-size:26px;line-height:1}
 .panel{position:relative}.panel h2{padding-right:44px}
-.xbtn{position:sticky;top:6px;float:right;z-index:5;width:34px;height:34px;margin:0 -4px 0 8px;border-radius:50%;background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:16px;line-height:1;display:grid;place-items:center}
+.xbtn{position:sticky;top:0;float:right;z-index:5;width:34px;height:34px;margin:-6px -4px 0 8px;border-radius:50%;background:var(--bg);color:var(--ink);border:1px solid var(--line);font-size:16px;line-height:1;display:grid;place-items:center}
 .tcrow{display:flex;align-items:center;gap:10px;padding:6px 0}.tcn{flex:1}.tcrow input[type=color]{width:46px;height:34px;padding:2px;margin:0;border-radius:10px;flex:none}
 .grid{gap:2px;padding:0 6px}.cell{padding:3px 2px;border-radius:8px}.mev{padding:0 2px;letter-spacing:-.01em}
 .ev.short{padding:2px 8px;font-size:12px;line-height:18px;white-space:nowrap;text-overflow:ellipsis}.ev.short .sl{display:none}
@@ -167,7 +158,6 @@ body.task-compact .task .t b{font-size:13.5px;line-height:1.25}
 .dayn{font-size:10px;opacity:.75;margin-left:4px;font-weight:500;white-space:nowrap}
 .cell.evm{overflow:visible}.mbar{display:block;flex:none;align-self:stretch;position:relative;z-index:1;height:13px;min-height:13px;margin:1px -3px 0;font-size:9.5px;line-height:13px;background:color-mix(in srgb,var(--c) 85%,var(--card));color:var(--ink);white-space:nowrap}
 .mbar.mbs{margin-left:-1px;border-radius:7px 0 0 7px}.mbar.mbe{margin-right:-1px;border-radius:0 7px 7px 0}.mbar.mbs.mbe{border-radius:7px}.mbar.mbl{margin-left:-5px}.mbar.mbr{margin-right:-5px}
-.mbar.mboow{opacity:.9}
 .mbar.sp{background:none;visibility:hidden}.mbt{display:block;height:13px;position:absolute;left:0;top:0;z-index:3;font-style:normal;padding-left:5px;overflow:hidden;text-overflow:ellipsis;width:calc(var(--len)*100% + (var(--len) - 1)*8px);color:inherit;text-shadow:none}
 .task.virt,.adev.virt,.pill.virt{border-style:dashed;opacity:.85}.task.virt .st{font-size:15px}
 .sy,.st,.tchip .sy,.pill .sy{text-decoration:none!important}.done .sy{text-decoration:none!important;opacity:1}.tgn{color:color-mix(in srgb,var(--c) 78%,var(--ink));font-weight:700}.tcrow input.tcn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;color:inherit;font:inherit}
@@ -644,11 +634,9 @@ const evs=ev.map((e,i)=>{if(e.e<=HS||e.s>=HE)return '';const ly=lay.get(e.id)||{
 return `<div class="ev${(e.e-e.s)<0.75?' short':''}" data-dk="e${e.id}" onclick="detail('event',${e.id},'${k}')" style="--c:${ec(e)};top:${Math.max(0,e.s-HS)*PX}px;left:calc(8px + ${ind}px + ${ly.c} * (100% - 14px - ${ind}px) / ${ly.n});width:calc((100% - 14px - ${ind}px) / ${ly.n} - 3px);right:auto;z-index:${1+ly.dp};${ly.dp?'box-shadow:0 2px 8px #0003;':''}height:${Math.max(MIN_EV_PX,(Math.min(e.e,HE)-Math.max(e.s,HS))*PX-2)}px"><b>${esc(e.t)}</b> <span class="sub"><span class="tm">${fmt(e.s)}–${fmt(e.e)}</span>${e.rec!='none'?' ↻':''}${dayTag(e)}</span>${sl}</div>`}).join('');
 let last=-9e9;const tms=tm.map(t=>{const top=Math.min(Math.max(Math.max(0,t.time-HS)*PX+2,last+2),(HE-HS)*PX-28);last=top+28;if(t.v)return `<button class="tk virt" style="--c:${col(t.tag)};top:${top}px" onclick="vDetail(${t.base.id},'${t.date}')" title="Projected from repeat rule">\u21BB <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`;return `<button class="tk ${t.p==2?'done':''}" data-dk="t${t.id}" style="--c:${col(t.tag)};top:${top}px" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> <span class="tm">${fmt(t.time)}</span> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`}).join('');
 const n=new Date(),nowH=n.getHours()+n.getMinutes()/60;
-const isToday=k===iso(TODAY);
-const nowBar=isToday&&nowH>=HS&&nowH<=HE?`<div class="nowbar"><span>${fmt(nowH)}</span></div>`:'';
-const now=isToday&&nowH>=HS&&nowH<=HE?`<div class="now" style="top:${Math.max(0,nowH-HS)*PX}px"></div>`:'';
+const now=k==iso(TODAY)&&nowH>=HS&&nowH<=HE?`<div class="now" style="top:${Math.max(0,nowH-HS)*PX}px"></div>`:'';
 const pend=tasks.filter(t=>isTaskPending(t)).sort((a,b)=>a.date.localeCompare(b.date)).map(taskRow).join('');
-return `<div class="pad">${(ad.length||dls.length||any.length||vo.some(o=>o.time==null))?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.filter(o=>o.time==null).map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${nowBar}${h}${evs}${tms}${now}</div>
+return `<div class="pad">${(ad.length||dls.length||any.length||vo.some(o=>o.time==null))?`<div class="adrow">${dls.map(t=>`<button class="adev dl" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`).join('')}${ad.map(e=>`<button class="adev" style="--c:${ec(e)}" onclick="detail('event',${e.id})">${esc(e.t)}${dayTag(e)}</button>`).join('')}${any.map(t=>`<button class="adev tk0 ${t.p==2?'done':''}" data-dk="u${t.id}" style="--c:${col(t.tag)}" onclick="detail('task',${t.id})"><b class="sy">${SY[t.p]}</b> ${ic(t.icon)} <span class="tn">${esc(t.t)}</span></button>`).join('')}${vo.filter(o=>o.time==null).map(o=>vpill(o,'adev')).join('')}</div>`:''}<div class="tl" onclick="gapTap(event)" style="height:${(HE-HS)*PX}px;margin-bottom:18px">${h}${evs}${tms}${now}</div>
 <b>Pending tasks</b> <span class="sub">planned earlier, not completed</span><div style="margin-top:8px">${pend||'<div class="empty">All caught up.</div>'}</div></div>`}
 
 /* ================== VIEW: WEEK ================== */
@@ -664,9 +652,7 @@ if(M!='events')tkOn(d).forEach(t=>it.push({t:t.time??25,h:tpill(t,t.time,false)}
 if(M!='events')tasks.filter(t=>tagVis(t)&&t.due==k&&t.p<2).forEach(t=>it.push({t:-2,h:`<button class="pill dlp" onclick="detail('task',${t.id})">\u2691\uFE0E ${esc(t.t)}</button>`}));
 if(M!='events')fo.filter(o=>o.date==k&&!inEv(o)).forEach(o=>it.push({t:o.time??25,h:vpill(o,'pill t')}));
 it.sort((x,y)=>x.t-y.t);
-const dow=d.getDay(),isWknd=dow===0||dow===6,isPst=k<iso(TODAY),isTd=k===iso(TODAY);
-const rowCls='dayrow'+(isWknd?' weekend':'')+(isPst?' past':'')+(isTd?' today-row':'');
-h+=`<div class="${rowCls}"><div class="dn ${isTd?'today':''}" onclick="cur=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});go('today')"><small class="sub">${d.toLocaleDateString('en',{weekday:'short'})}</small><b>${d.getDate()}</b></div><div style="flex:1;min-width:0">${it.map(x=>x.h).join('')||'<span class="sub">Free</span>'}</div></div>`}
+h+=`<div class="dayrow"><div class="dn ${k==iso(TODAY)?'today':''}" onclick="cur=new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()});go('today')"><small class="sub">${d.toLocaleDateString('en',{weekday:'short'})}</small><b>${d.getDate()}</b></div><div style="flex:1;min-width:0">${it.map(x=>x.h).join('')||'<span class="sub">Free</span>'}</div></div>`}
 return `<div class="seg">${[['both','Both'],['events','Events'],['tasks','Tasks']].map(([k,l])=>`<button class="${M==k?'on':''}" onclick="wkMode='${k}';render()">${l}</button>`).join('')}</div><div class="pad"><div class="card calarea" style="padding:6px 14px">${h}</div><div class="sub">Tap an entry for details. Tap a date to open the day.</div></div>`}
 
 /* ================== VIEW: MONTH ================== */
@@ -681,7 +667,7 @@ return f.busy?o.reduce((s,e)=>s+Math.min(e.e,f.win[1])-Math.max(e.s,f.win[0]),0)
 function vMonth(){const y=cur.getFullYear(),m=cur.getMonth(),n=new Date(y,m+1,0).getDate(),lead=(new Date(y,m,1).getDay()+6)%7,em=monMode=='events',slot={},rowLn={};
 if(em){const lanes={};events.filter(e=>isMulti(e)&&!calOff.has(e.cal)&&!calHide.has(e.cal)).sort((a,b)=>a.day.localeCompare(b.day)||b.endDay.localeCompare(a.endDay)||a.id-b.id).forEach(e=>{for(let r=0;r<6;r++){const cs=[];for(let c=0;c<7;c++){const d=r*7+c-lead+1;if(d>=1&&d<=n){const k=iso(new Date(y,m,d));if(k>=e.day&&k<=e.endDay)cs.push([c,k])}}
 if(!cs.length)continue;const Ls=lanes[r]=lanes[r]||[];let li=Ls.findIndex(x=>x<cs[0][0]);if(li<0)li=Ls.length;Ls[li]=cs[cs.length-1][0];
-cs.forEach(([c,k],i)=>{const oow=(i===0&&c===0&&k!==e.day)||(i===cs.length-1&&c===6&&k!==e.endDay);(slot[k]=slot[k]||[])[li]={e,first:i==0,len:cs.length,cl:i>0,cr:i<cs.length-1,st:k==e.day,en:k==e.endDay,oow};});rowLn[r]=Ls.length}})}
+cs.forEach(([c,k],i)=>{(slot[k]=slot[k]||[])[li]={e,first:i==0,len:cs.length,cl:i>0,cr:i<cs.length-1,st:k==e.day,en:k==e.endDay}});rowLn[r]=Ls.length}})}
 const fo={};futureOcc(1).forEach(o=>fo[o.date]=(fo[o.date]||0)+1);
 let c='',cnt=0;for(let i=0;i<lead;i++)c+='<div></div>';
 for(let d=1;d<=n;d++){const dt=new Date(y,m,d),k0=iso(dt),h=hrs(evVis(dt)),a=allOn(dt).filter(tagVis),hit=filtObj&&match(dt,filtObj),vn=fo[k0]||0,sh=monMode=='hours'?h*9:(a.length+vn)*12;if(hit)cnt++;
@@ -737,7 +723,7 @@ function vDetail(bid,date){const b=tasks.find(x=>x.id==bid);if(!b)return;
 sheet(`<div class="sub"><span class="dot" style="background:${col(b.tag)}"></span>${tl(b.tag)} list</div><h2>${ic(b.icon)} ${esc(b.t)}</h2><div class="sub" style="margin:-4px 0 8px">Projected from the repeat rule. Not created in Google Tasks yet.</div><div style="margin:0 0 8px">${bdg(b)}</div><div style="margin-bottom:12px">${dl(date)}${b.time!=null?' at '+fmt(b.time):''}</div><button class="btn alt" style="margin-bottom:8px" onclick="skipVirtual(${bid},'${date}')">Skip this occurrence</button><button class="btn" onclick="close_()">Close</button>`)}
 function skipVirtual(bid,date){const sn=snapState(),b=tasks.find(x=>x.id==bid);if(!b)return;b.skip=[...(b.skip||[]),date];updateTask(b);close_();render();toast('Occurrence skipped',()=>{undoTo(sn)();const b0=tasks.find(x=>x.id==bid);if(b0)updateTask(b0)})}
 function skipOccBtn(i){const sn=snapState(),t=tasks.find(x=>x.id==i);if(!t)return;skipTo(t);updateTask(t);render();sheet(detHtml());toast('Skipped. Next: '+dl(t.date),()=>{undoTo(sn)();const t0=tasks.find(x=>x.id==i);if(t0)updateTask(t0)})}
-function barsHtml(sl,ln,k){let o='';for(let i=0;i<ln;i++){const s=sl&&sl[i];o+=s?`<span class="mbar${s.cl?' mbl':''}${s.cr?' mbr':''}${s.st?' mbs':''}${s.en?' mbe':''}${s.oow?' mboow':''}" style="--c:${ec(s.e)}" onclick="event.stopPropagation();detail('event',${s.e.id},'${k}')">${s.first?`<i class="mbt" style="--len:${s.len}">${esc(s.e.t)}</i>`:''}</span>`:'<span class="mbar sp"></span>'}return o}
+function barsHtml(sl,ln,k){let o='';for(let i=0;i<ln;i++){const s=sl&&sl[i];o+=s?`<span class="mbar${s.cl?' mbl':''}${s.cr?' mbr':''}${s.st?' mbs':''}${s.en?' mbe':''}" style="--c:${ec(s.e)}" onclick="event.stopPropagation();detail('event',${s.e.id},'${k}')">${s.first?`<i class="mbt" style="--len:${s.len}">${esc(s.e.t)}</i>`:''}</span>`:'<span class="mbar sp"></span>'}return o}
 function startDayChg(){const a=$('#fd'),b=$('#fed');if(a&&b&&a.value){b.value=a.value;b.min=a.value}}
 function endDayChg(){const a=$('#fd'),b=$('#fed');if(a&&b&&a.value&&b.value&&b.value<a.value){b.value=a.value;toast('End date cannot be before the start date')}}
 
@@ -772,7 +758,7 @@ const row=(n,dp,L)=>`<div class="note ${n.hold?'held':''} ${noteSelIds.has(n.id)
 const sec=tg.map(t=>{const L=notes.filter(n=>n.tag==t&&vis(n)),ids=new Set(L.map(n=>n.id)),roots=L.filter(n=>!n.parent||!ids.has(n.parent)).sort((a,b)=>b.ts-a.ts);
 return `<div class="card" data-tag="${esc(t)}"><h3 class="nth" data-t="${esc(t)}" onclick="newNoteIn(this.dataset.t)">${esc(t)} <span class="sub">${L.length}</span></h3>${roots.map(n=>row(n,0,L)).join('')}</div>`}).join('');
 const bar=noteMode?`<div class="pickbar"><span>${noteSelIds.size} selected</span><span><button class="chip" onclick="noteMode=false;render()">Cancel</button> <button class="chip" style="font-weight:700" onclick="copyNotes()">Copy</button> <button class="chip" style="font-weight:700;color:#E5484D" onclick="deleteSelected()">Delete all selected</button></span></div>`:'';
-return bar+`<div class="chips">${nTags().map(t=>`<button class="chip ${nSel.has(t)?'on':''}" onclick="nSel.has('${t}')?nSel.delete('${t}'):nSel.add('${t}');render()">${esc(t)}</button>`).join('')}<button class="chip ${showHold?'on':''}" onclick="showHold=!showHold;render()">Show on hold</button><button class="chip ${noteDragOn?'on':''}" onclick="noteDragOn=!noteDragOn;noteMode=false;render()" aria-label="Drag mode" title="Drag notes">⋮⋮</button></div><div class="pad">${sec||'<div class="empty"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4;margin-bottom:10px"><path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="M14 6.5l3 3"/></svg><div style="font-weight:600;margin-bottom:4px">Ingen noter endnu</div><div style="font-size:12px">Tryk + for at tilføje din første note</div></div>'}${noteDragOn?'<div class="sd" style="text-align:center">Drag mode is on: press and hold the \u283F handle, then drag a note onto a tag to move it, or onto the middle of another note to indent it. Swipe anywhere else to scroll.</div>':''}</div>`}
+return bar+`<div class="chips">${nTags().map(t=>`<button class="chip ${nSel.has(t)?'on':''}" onclick="nSel.has('${t}')?nSel.delete('${t}'):nSel.add('${t}');render()">${esc(t)}</button>`).join('')}<button class="chip ${showHold?'on':''}" onclick="showHold=!showHold;render()">Show on hold</button><button class="chip ${noteDragOn?'on':''}" onclick="noteDragOn=!noteDragOn;noteMode=false;render()" aria-label="Drag mode" title="Drag notes">⋮⋮</button></div><div class="pad">${sec||'<div class="empty">No notes to show. Tap + to add one.</div>'}${noteDragOn?'<div class="sd" style="text-align:center">Drag mode is on: press and hold the \u283F handle, then drag a note onto a tag to move it, or onto the middle of another note to indent it. Swipe anywhere else to scroll.</div>':''}</div>`}
 function noteMenu(i){const n=notes.find(x=>x.id==i);D={kind:'note',id:i};
 sheet(`<div class="sub">${esc(n.tag)}${n.hold||tagHold.has(n.tag)?' · on hold':''}</div><textarea id="nedit" style="min-height:90px;margin-top:6px">${esc(n.t)}</textarea><div class="sub" style="margin:-4px 0 10px">Edit directly. Changes are saved when you tap outside.</div>
 <div class="opts"><button class="opt" onclick="close_();openForm('task',null,notes.find(x=>x.id==${i}).t,null,${i})">✓<span>Task</span></button><button class="opt" onclick="close_();openForm('event',null,notes.find(x=>x.id==${i}).t,null,${i})">▦<span>Event</span></button><button class="opt" onclick="holdNote(${i})">${n.hold?playIcon(26):pauseIcon(26)}<span>${n.hold?'Resume':'On hold'}</span></button><button class="opt" style="color:#E5484D" onclick="discard(${i})">✕<span>Discard</span></button></div>`)}
@@ -1111,7 +1097,7 @@ async function applyRepeatEventDrag(mode){
 }
 
 /* ================== SHEET / DETAIL ================== */
-function sheet(h){$('#panel').innerHTML='<div class="grab" onclick="closeX()" aria-label="Close"><i></i></div><button class="xbtn" onclick="closeX()" aria-label="Close">✕</button>'+h;$('#sheet').classList.add('open')}
+function sheet(h){$('#panel').innerHTML='<button class="xbtn" onclick="closeX()" aria-label="Close">✕</button>'+h;$('#sheet').classList.add('open')}
 const isOpen=()=>$('#sheet').classList.contains('open');
 function close_(){if(pendMove){pendMove=null;setTimeout(render,0)}
 if(D.kind=='note'){const ta=$('#nedit'),n=notes.find(x=>x.id==D.id);if(ta&&n&&ta.value.trim()&&ta.value.trim()!=n.t)n.t=ta.value.trim()}
@@ -1299,10 +1285,6 @@ document.addEventListener('touchend',e=>{
 },{passive:true});
 
 /* ================== START ================== */
-let _sheetY0=null;
-$('#panel').addEventListener('touchstart',e=>{if(!isOpen())return;if(!e.target.closest('.grab'))return;_sheetY0=e.touches[0].clientY;},{passive:true});
-$('#panel').addEventListener('touchmove',e=>{if(_sheetY0===null)return;const dy=e.touches[0].clientY-_sheetY0;if(dy>0){$('#panel').style.transition='none';$('#panel').style.transform='translateY('+dy+'px)';}},{passive:true});
-$('#panel').addEventListener('touchend',e=>{if(_sheetY0===null)return;const dy=e.changedTouches[0].clientY-_sheetY0;_sheetY0=null;$('#panel').style.transition='transform .2s';if(dy>80){$('#panel').style.transform='translateY('+window.innerHeight+'px)';setTimeout(()=>{close_();$('#panel').style.transform='';$('#panel').style.transition='';},200);}else{$('#panel').style.transform='';setTimeout(()=>$('#panel').style.transition='',200);}},{passive:true});
 loadState();sortBy=S.sortBy||'date';
 render();
 startApp();
